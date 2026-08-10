@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\BatchIcmpProbe;
 use App\Jobs\ProbeTarget;
 use App\Models\ProbeCycle;
 use App\Models\Target;
@@ -30,10 +31,7 @@ class RunProbeCycle extends Command
                 ->get();
 
             foreach ($staleCycles as $stale) {
-                $stale->update([
-                    'status' => 'timed_out',
-                    'completed_at' => now(),
-                ]);
+                $stale->update(['status' => 'timed_out', 'completed_at' => now()]);
                 $this->warn("Marked stale cycle #{$stale->id} as timed_out.");
             }
 
@@ -43,7 +41,7 @@ class RunProbeCycle extends Command
                 ->first();
 
             if ($activeCycle) {
-                $this->warn("Cycle #{$activeCycle->id} still running (started {$activeCycle->started_at->diffForHumans()}), skipping.");
+                $this->warn("Cycle #{$activeCycle->id} still running, skipping.");
                 return self::SUCCESS;
             }
 
@@ -74,12 +72,19 @@ class RunProbeCycle extends Command
                 'status' => 'running',
             ]);
 
-            foreach ($targets as $target) {
-                ProbeTarget::dispatch($target->id, $cycle->id)
-                    ->onQueue('probes');
+            // Batch ICMP: one fping call for all ICMP-enabled targets
+            $icmpTargetIds = $targets->filter(fn($t) => $t->icmp_enabled)->pluck('id')->toArray();
+            if (!empty($icmpTargetIds)) {
+                BatchIcmpProbe::dispatch($icmpTargetIds, $cycle->id);
             }
 
-            $this->info("Probe cycle #{$cycle->id} started for {$targets->count()} targets ({$expectedProbes} probes).");
+            // Individual TCP jobs: one per TCP-enabled target
+            $tcpTargets = $targets->filter(fn($t) => $t->tcp_enabled && $t->tcp_port);
+            foreach ($tcpTargets as $target) {
+                ProbeTarget::dispatch($target->id, $cycle->id);
+            }
+
+            $this->info("Cycle #{$cycle->id}: {$targets->count()} targets, ICMP batch ({$expectedProbes} probes).");
 
         } finally {
             $lock->release();

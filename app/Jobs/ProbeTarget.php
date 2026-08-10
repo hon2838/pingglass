@@ -5,7 +5,6 @@ namespace App\Jobs;
 use App\Models\Measurement;
 use App\Models\ProbeCycle;
 use App\Models\Target;
-use App\Services\Monitoring\Drivers\FpingDriver;
 use App\Services\Monitoring\Drivers\TcpConnectDriver;
 use App\Services\Monitoring\IncidentEvaluator;
 use App\Services\Monitoring\ProbeResult;
@@ -16,7 +15,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -24,15 +22,19 @@ class ProbeTarget implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public string $queue = 'probes';
-
     public function __construct(
         public int $targetId,
         public int $probeCycleId,
-    ) {}
+    ) {
+        $this->onQueue('probes');
+    }
 
+    /**
+     * Handle TCP probing for a target.
+     * ICMP is handled by BatchIcmpProbe. This job only does TCP.
+     * After TCP completes, it evaluates combined status (ICMP result is already stored).
+     */
     public function handle(
-        FpingDriver $fping,
         TcpConnectDriver $tcp,
         StatusEvaluator $statusEval,
         IncidentEvaluator $incidentEval,
@@ -45,57 +47,46 @@ class ProbeTarget implements ShouldQueue
         if (!$target->is_enabled) return;
         if ($cycle->status !== 'running') return;
 
-        // Per-target lock: prevent concurrent probes on the same target from different cycles
-        $lock = Cache::lock("probe-target-{$this->targetId}", 30);
-        if (!$lock->get()) {
-            Log::info('Target probe skipped - lock held', [
-                'target_id' => $this->targetId,
-                'cycle_id' => $this->probeCycleId,
-            ]);
-            return;
-        }
-
-        $icmpResult = null;
-        $tcpResult = null;
+        if (!$target->tcp_enabled || !$target->tcp_port) return;
 
         try {
-            if ($target->icmp_enabled) {
-                $icmpResult = $fping->probe($target);
-                $this->storeMeasurement($target, $cycle, $icmpResult);
-                $this->updateCycleCounters($cycle, $icmpResult);
+            $tcpResult = $tcp->probe($target);
+            $this->storeMeasurement($target, $cycle, $tcpResult);
+            $this->updateCycleCounters($cycle, $tcpResult);
+
+            // Load the ICMP result that was already stored by BatchIcmpProbe
+            $icmpMeasurement = Measurement::where('target_id', $target->id)
+                ->where('probe_cycle_id', $cycle->id)
+                ->where('protocol', 'icmp')
+                ->first();
+
+            $icmpResult = null;
+            if ($icmpMeasurement && $icmpMeasurement->status !== 'error') {
+                $icmpResult = ProbeResult::fromSamples('icmp', $icmpMeasurement->samples ?? [], $settings->icmpTimeout());
             }
 
-            if ($target->tcp_enabled && $target->tcp_port) {
-                $tcpResult = $tcp->probe($target);
-                $this->storeMeasurement($target, $cycle, $tcpResult);
-                $this->updateCycleCounters($cycle, $tcpResult);
-            }
-
-            // Evaluate status and incidents using fresh state
+            // Evaluate combined ICMP + TCP status and incidents
             $state = $statusEval->evaluate($target, $icmpResult, $tcpResult);
             $incidentEval->evaluate($target, $state);
 
-            Log::info('Probe completed', [
+            Log::info('TCP probe completed', [
                 'cycle_id' => $cycle->id,
                 'target_id' => $target->id,
                 'target_name' => $target->name,
-                'icmp_status' => $icmpResult?->status,
-                'icmp_loss' => $icmpResult?->lossPercent,
-                'tcp_status' => $tcpResult?->status,
-                'tcp_loss' => $tcpResult?->lossPercent,
+                'tcp_status' => $tcpResult->status,
+                'tcp_loss' => $tcpResult->lossPercent,
+                'tcp_median' => $tcpResult->medianMs,
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Probe failed', [
+            Log::error('TCP probe failed', [
                 'target_id' => $target->id,
                 'cycle_id' => $cycle->id,
                 'error' => $e->getMessage(),
             ]);
 
-            $this->storeErrorMeasurement($target, $cycle, 'icmp', $e->getMessage());
-            $this->updateCycleCounters($cycle, ProbeResult::error('icmp', $e->getMessage()));
-        } finally {
-            $lock->release();
+            $this->storeErrorMeasurement($target, $cycle, 'tcp', $e->getMessage());
+            $this->updateCycleCounters($cycle, ProbeResult::error('tcp', $e->getMessage()));
         }
     }
 
@@ -104,7 +95,7 @@ class ProbeTarget implements ShouldQueue
         Measurement::create([
             'probe_cycle_id' => $cycle->id,
             'target_id' => $target->id,
-            'protocol' => $result->protocol,
+            'protocol' => 'tcp',
             'measured_at' => $cycle->started_at,
             'sent' => $result->sent,
             'received' => $result->received,
@@ -146,11 +137,9 @@ class ProbeTarget implements ShouldQueue
             ? 'failed_probe_count'
             : 'successful_probe_count';
 
-        // Atomically increment and check if cycle is complete
         DB::transaction(function () use ($cycle, $field) {
             ProbeCycle::where('id', $cycle->id)->lockForUpdate()->increment($field);
 
-            // Reload to get fresh counter values
             $fresh = ProbeCycle::where('id', $cycle->id)->first();
             $totalDone = $fresh->successful_probe_count + $fresh->failed_probe_count;
 

@@ -182,6 +182,125 @@ class TargetController extends Controller
         return response()->json($results);
     }
 
+    public function batchDestroy(Request $request)
+    {
+        $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|exists:targets,id',
+        ]);
+
+        $count = Target::whereIn('id', $request->ids)->count();
+        AuditLog::log('target.batch_deleted', null, ['ids' => $request->ids, 'count' => $count]);
+        Target::whereIn('id', $request->ids)->delete();
+
+        return back()->with('success', "Deleted {$count} targets.");
+    }
+
+    public function import(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:csv,txt|max:2048',
+            'category_id' => 'required|exists:categories,id',
+            'is_public' => 'boolean',
+            'is_enabled' => 'boolean',
+            'icmp_enabled' => 'boolean',
+            'tcp_enabled' => 'boolean',
+            'show_host_publicly' => 'boolean',
+        ]);
+
+        $file = $request->file('file');
+        $lines = array_filter(explode("\n", file_get_contents($file->getRealPath())));
+        $categoryId = $request->input('category_id');
+        $isPublic = $request->boolean('is_public', true);
+        $isEnabled = $request->boolean('is_enabled', true);
+        $icmpEnabled = $request->boolean('icmp_enabled', true);
+        $tcpEnabled = $request->boolean('tcp_enabled', false);
+        $showHost = $request->boolean('show_host_publicly', false);
+
+        $imported = 0;
+        $skipped = 0;
+        $errors = [];
+
+        foreach ($lines as $i => $line) {
+            $line = trim($line);
+            if ($line === '' || $i === 0 && str_starts_with(strtolower($line), 'name')) continue;
+
+            $parts = array_map('trim', str_getcsv($line));
+            if (count($parts) < 2) {
+                $errors[] = "Line " . ($i + 1) . ": needs at least name,host";
+                $skipped++;
+                continue;
+            }
+
+            $name = $parts[0];
+            $host = $parts[1];
+            $tcpPort = $parts[2] ?? null;
+            $slug = $parts[3] ?? null;
+
+            if (empty($name) || empty($host)) {
+                $errors[] = "Line " . ($i + 1) . ": name and host required";
+                $skipped++;
+                continue;
+            }
+
+            // Auto-generate slug if not provided
+            if (empty($slug)) {
+                $slug = strtolower(preg_replace('/[^a-zA-Z0-9\x{4e00}-\x{9fff}]+/u', '-', $name));
+                $slug = trim($slug, '-');
+                // Ensure uniqueness
+                $baseSlug = $slug;
+                $counter = 1;
+                while (Target::where('slug', $slug)->exists()) {
+                    $slug = $baseSlug . '-' . $counter;
+                    $counter++;
+                }
+            }
+
+            // SSRF validation
+            try {
+                SsrfProtection::validateHost($host);
+            } catch (ValidationException $e) {
+                $errors[] = "Line " . ($i + 1) . ": {$host} - unsafe host";
+                $skipped++;
+                continue;
+            }
+
+            $targetTcpPort = $tcpPort ? (int) $tcpPort : null;
+            $targetTcpEnabled = $tcpEnabled && $targetTcpPort;
+
+            try {
+                Target::create([
+                    'category_id' => $categoryId,
+                    'name' => $name,
+                    'slug' => $slug,
+                    'host' => $host,
+                    'show_host_publicly' => $showHost,
+                    'is_public' => $isPublic,
+                    'is_enabled' => $isEnabled,
+                    'icmp_enabled' => $icmpEnabled,
+                    'tcp_enabled' => $targetTcpEnabled,
+                    'tcp_port' => $targetTcpPort,
+                    'sort_order' => 0,
+                ]);
+                $imported++;
+            } catch (\Exception $e) {
+                $errors[] = "Line " . ($i + 1) . ": " . $e->getMessage();
+                $skipped++;
+            }
+        }
+
+        $msg = "Imported {$imported} targets.";
+        if ($skipped > 0) $msg .= " Skipped {$skipped}.";
+
+        AuditLog::log('target.imported', null, ['imported' => $imported, 'skipped' => $skipped]);
+
+        if (!empty($errors) && $imported === 0) {
+            return back()->with('error', implode(' ', array_slice($errors, 0, 5)));
+        }
+
+        return back()->with('success', $msg);
+    }
+
     private function validateProbeConfig(array $data): void
     {
         if ($data['tcp_enabled'] && empty($data['tcp_port'])) {

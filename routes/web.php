@@ -31,6 +31,8 @@ Route::middleware(['admin'])->prefix('admin')->name('admin.')->group(function ()
         ->name('targets.test')
         ->middleware('throttle:10,1');
     Route::post('targets/{target}/toggle', [AdminTargetController::class, 'toggle'])->name('targets.toggle');
+    Route::delete('targets-batch', [AdminTargetController::class, 'batchDestroy'])->name('targets.batch-destroy');
+    Route::post('targets-import', [AdminTargetController::class, 'import'])->name('targets.import');
 
     Route::get('incidents', [AdminIncidentController::class, 'index'])->name('incidents.index');
     Route::post('incidents/{incident}/close', [AdminIncidentController::class, 'close'])->name('incidents.close');

@@ -33,9 +33,13 @@ class HealthController extends Controller
             $checks['redis'] = ['status' => 'error', 'message' => $e->getMessage()];
         }
 
-        // Queue
+        // Queue — check the actual configured queue driver
         try {
-            $queueSize = Redis::llen('queues:probes');
+            if (config('queue.default') === 'database') {
+                $queueSize = DB::table('jobs')->count();
+            } else {
+                $queueSize = Redis::llen('queues:probes');
+            }
             $checks['queue'] = [
                 'status' => $queueSize > 100 ? 'warning' : 'ok',
                 'message' => "{$queueSize} jobs pending",
@@ -129,11 +133,15 @@ class HealthController extends Controller
         ];
 
         // Last completed cycle
-        $lastCompleted = ProbeCycle::where('status', 'completed')->latest('completed_at')->first();
+        $lastCompleted = ProbeCycle::where('status', 'completed')
+            ->latest('completed_at')
+            ->first();
+
         $checks['last_completed_cycle'] = [
             'status' => $lastCompleted ? 'ok' : 'unknown',
             'message' => $lastCompleted
-                ? "Cycle #{$lastCompleted->id}: {$lastCompleted->successful_probe_count}/{$lastCompleted->expected_probe_count} successful, {$lastCompleted->duration_seconds ?? '?'}s"
+                ? "Cycle #{$lastCompleted->id}: {$lastCompleted->successful_probe_count}/{$lastCompleted->expected_probe_count} successful, "
+                    . ($lastCompleted->duration_seconds ?? '?') . 's'
                 : 'No completed cycles yet',
         ];
 

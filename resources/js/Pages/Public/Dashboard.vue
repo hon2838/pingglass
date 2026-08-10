@@ -2,10 +2,7 @@
 import { Link } from '@inertiajs/vue3';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
 import Card from '@/Components/ui/card/Card.vue';
-import CardHeader from '@/Components/ui/card/CardHeader.vue';
-import CardTitle from '@/Components/ui/card/CardTitle.vue';
 import CardContent from '@/Components/ui/card/CardContent.vue';
-import Badge from '@/Components/ui/badge/Badge.vue';
 import StatusDot from '@/Components/StatusDot.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import { computed } from 'vue';
@@ -24,14 +21,17 @@ const overallLabel = computed(() => ({
     down: 'System Outage',
 }[props.overallStatus] || 'Status Unknown'));
 
-const overallVariant = computed(() => ({
-    operational: 'success',
-    degraded: 'warning',
-    down: 'destructive',
-}[props.overallStatus] || 'secondary'));
-
 function statusForTarget(target) {
     return target.state?.overall_status || 'unknown';
+}
+
+function timeAgo(dateStr) {
+    if (!dateStr) return 'Never';
+    const diff = Math.floor((new Date() - new Date(dateStr)) / 1000);
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
 }
 </script>
 
@@ -52,13 +52,13 @@ function statusForTarget(target) {
 
         <!-- Categories -->
         <div v-for="category in categories" :key="category.id" class="mb-8">
-            <div class="flex items-center gap-3 mb-4">
+            <div class="flex items-center justify-between mb-4">
                 <h2 class="text-lg font-semibold">{{ category.name }}</h2>
                 <Link
                     :href="route('monitor.category', category.slug)"
                     class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
-                    View all &rarr;
+                    View all {{ category.total_targets }} &rarr;
                 </Link>
             </div>
 
@@ -130,16 +130,3 @@ function statusForTarget(target) {
         </div>
     </div>
 </template>
-
-<script>
-function timeAgo(dateStr) {
-    if (!dateStr) return 'Never';
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diff = Math.floor((now - date) / 1000);
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-}
-</script>

@@ -31,7 +31,7 @@ Everything runs in one Laravel app. No separate microservices, no Node backend, 
 ## Quick start
 
 ```bash
-git clone <repo-url> pingglass
+git clone https://github.com/samleong123/pingglass.git
 cd pingglass
 
 composer install

@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS `users` (
 
 -- Default admin user (password: "password")
 INSERT INTO `users` (`id`, `name`, `email`, `password`, `created_at`, `updated_at`) VALUES
-(1, 'Admin', 'admin@pingglass.local', '$2y$12$QFWJZ1qM8yYH1R9vKZ1qMOeGqXkZ6l5R5pQXO7ZlVbS9YbCqPv6G', NOW(), NOW());
+(1, 'Admin', 'admin@pingglass.local', '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', NOW(), NOW());
 
 -- -------------------------------------------
 -- Table: password_reset_tokens

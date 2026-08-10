@@ -1,15 +1,32 @@
 <script setup>
-import { Link } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
 import Card from '@/Components/ui/card/Card.vue';
 import CardContent from '@/Components/ui/card/CardContent.vue';
+import Input from '@/Components/ui/input/Input.vue';
 import StatusDot from '@/Components/StatusDot.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
+import { ref, watch } from 'vue';
 
 defineOptions({ layout: PublicLayout });
 
 const props = defineProps({
     category: Object,
+    targets: Object,
+    filters: Object,
+});
+
+const search = ref(props.filters?.search || '');
+
+let searchTimeout = null;
+watch(search, (val) => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        router.get(route('monitor.category', props.category.slug), { search: val }, {
+            preserveState: true,
+            preserveScroll: true,
+        });
+    }, 300);
 });
 
 function statusForTarget(target) {
@@ -36,11 +53,20 @@ function timeAgo(dateStr) {
             </nav>
             <h1 class="text-2xl font-bold">{{ category.name }}</h1>
             <p v-if="category.description" class="text-muted-foreground mt-1">{{ category.description }}</p>
+            <p class="text-sm text-muted-foreground mt-1">{{ targets.total }} targets</p>
+        </div>
+
+        <!-- Search -->
+        <div class="mb-6 max-w-md">
+            <Input
+                v-model="search"
+                placeholder="Search targets by name or host..."
+            />
         </div>
 
         <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Link
-                v-for="target in category.targets"
+                v-for="target in targets.data"
                 :key="target.id"
                 :href="route('target.show', target.slug)"
                 class="group"
@@ -63,6 +89,9 @@ function timeAgo(dateStr) {
                                     <span v-if="target.state?.icmp_latency_ms">{{ target.state.icmp_latency_ms.toFixed(1) }} ms</span>
                                     <span v-else class="text-muted-foreground">-</span>
                                 </div>
+                                <div v-if="target.state?.icmp_loss_percent !== null && target.state?.icmp_loss_percent !== undefined" class="text-xs text-muted-foreground">
+                                    Loss: {{ target.state.icmp_loss_percent.toFixed(1) }}%
+                                </div>
                             </div>
                             <div v-if="target.tcp_enabled">
                                 <div class="text-xs text-muted-foreground mb-0.5">TCP :{{ target.tcp_port }}</div>
@@ -70,6 +99,9 @@ function timeAgo(dateStr) {
                                     <StatusDot :status="target.state?.tcp_status || 'unknown'" size="sm" />
                                     <span v-if="target.state?.tcp_latency_ms">{{ target.state.tcp_latency_ms.toFixed(1) }} ms</span>
                                     <span v-else class="text-muted-foreground">-</span>
+                                </div>
+                                <div v-if="target.state?.tcp_loss_percent !== null && target.state?.tcp_loss_percent !== undefined" class="text-xs text-muted-foreground">
+                                    Loss: {{ target.state.tcp_loss_percent.toFixed(1) }}%
                                 </div>
                             </div>
                         </div>
@@ -80,6 +112,26 @@ function timeAgo(dateStr) {
                     </CardContent>
                 </Card>
             </Link>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="targets.last_page > 1" class="flex justify-center gap-2 mt-8">
+            <Link
+                v-for="(link, idx) in targets.links"
+                :key="idx"
+                :href="link.url"
+                :class="[
+                    'px-3 py-1.5 rounded-md text-sm transition-colors',
+                    link.active ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+                    !link.url && 'opacity-50 pointer-events-none'
+                ]"
+                v-html="link.label"
+            />
+        </div>
+
+        <div v-if="targets.data.length === 0" class="text-center py-16 text-muted-foreground">
+            <p v-if="search">No targets matching "{{ search }}".</p>
+            <p v-else>No targets in this category.</p>
         </div>
     </div>
 </template>

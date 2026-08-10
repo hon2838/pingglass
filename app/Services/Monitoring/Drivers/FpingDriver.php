@@ -210,4 +210,206 @@ class FpingDriver implements ProbeDriver
         }
         return $samples;
     }
+
+    private const BATCH_SIZE = 250;
+    private const BATCH_PING_INTERVAL_MS = 25;
+
+    /**
+     * Probe multiple targets using fping in batches.
+     *
+     * fping sends one ping every `-p` milliseconds across ALL hosts in the call.
+     * With N hosts and period P, one pass takes N × P ms.
+     * For 10,000 hosts at 25ms interval = 250 seconds per pass — too slow.
+     *
+     * So we split into batches of BATCH_SIZE hosts.
+     * Each batch: 250 hosts × 25ms = 6.25 seconds per pass.
+     * With 10 samples: ~62 seconds per batch.
+     *
+     * Returns ProbeResult keyed by target ID.
+     */
+    public function probeBatch(array $targets, ?int $samples = null, ?int $timeout = null): array
+    {
+        $samples = $samples ?? $this->settings->icmpSamples();
+        $timeoutMs = $timeout ?? $this->settings->icmpTimeout();
+        $fpingPath = config('pingglass.fping_path', '/usr/bin/fping');
+
+        // Resolve and validate all hosts first
+        $ipToTarget = [];
+        $resolvedIps = [];
+        $errors = [];
+
+        foreach ($targets as $target) {
+            $host = $target->host;
+
+            if (!preg_match('/^[a-zA-Z0-9.\-:]+$/', $host)) {
+                $errors[$target->id] = ProbeResult::error('icmp', 'Invalid host format');
+                continue;
+            }
+
+            $resolvedIp = SsrfProtection::resolveForProbe($host);
+            if ($resolvedIp === null) {
+                $errors[$target->id] = ProbeResult::error('icmp', 'Host resolves to unsafe or unreachable address');
+                continue;
+            }
+
+            $ipToTarget[$resolvedIp] = $target;
+            $resolvedIps[] = $resolvedIp;
+        }
+
+        if (empty($resolvedIps)) {
+            return $errors;
+        }
+
+        // Split into batches and probe each
+        $batches = array_chunk($resolvedIps, self::BATCH_SIZE);
+        $allResults = [];
+
+        foreach ($batches as $batchIps) {
+            $batchResults = $this->probeBatchChunk(
+                $batchIps, $ipToTarget, $fpingPath, $samples, $timeoutMs
+            );
+            $allResults = array_merge($allResults, $batchResults);
+        }
+
+        return array_merge($errors, $allResults);
+    }
+
+    private function probeBatchChunk(array $ips, array $ipToTarget, string $fpingPath, int $samples, int $timeoutMs): array
+    {
+        // Write IPs to a temp file to avoid command line length limits
+        $tmpFile = tempnam(sys_get_temp_dir(), 'fping_');
+        file_put_contents($tmpFile, implode("\n", $ips) . "\n");
+
+        // Use short interval between pings — fping multiplexes across all hosts
+        $intervalMs = self::BATCH_PING_INTERVAL_MS;
+
+        $command = [
+            $fpingPath,
+            '-C', (string) $samples,
+            '-p', (string) $intervalMs,
+            '-t', (string) $timeoutMs,
+            '-q',
+            '-f', $tmpFile,
+        ];
+
+        // Total time: (hosts × interval × samples) + buffer
+        $hostCount = count($ips);
+        $totalTimeout = (($hostCount * $intervalMs / 1000) * $samples) + ($timeoutMs / 1000) + 15;
+
+        $results = [];
+
+        try {
+            $result = Process::timeout($totalTimeout)->run($command);
+
+            $exitCode = $result->exitCode();
+            $stdout = $result->output();
+            $stderr = $result->errorOutput();
+
+            if ($exitCode >= 2) {
+                $errorMsg = trim($stderr) ?: trim($stdout);
+                foreach ($ips as $ip) {
+                    $target = $ipToTarget[$ip];
+                    $results[$target->id] = ProbeResult::error('icmp', "fping error (exit {$exitCode}): {$errorMsg}");
+                }
+                return $results;
+            }
+
+            $output = trim($stderr) !== '' ? $stderr : $stdout;
+            $results = $this->parseBatchOutput($output, $samples, $ipToTarget);
+
+        } catch (\Exception $e) {
+            foreach ($ips as $ip) {
+                $target = $ipToTarget[$ip];
+                if (!isset($results[$target->id])) {
+                    $results[$target->id] = ProbeResult::error('icmp', $e->getMessage());
+                }
+            }
+        } finally {
+            @unlink($tmpFile);
+        }
+
+        // Fill in any missing targets
+        foreach ($ips as $ip) {
+            $target = $ipToTarget[$ip];
+            if (!isset($results[$target->id])) {
+                $results[$target->id] = ProbeResult::error('icmp', 'No response from fping');
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * Parse fping output with multiple hosts.
+     * Each line: "host : val1 val2 - val4"
+     * Returns ProbeResult keyed by target ID.
+     */
+    private function parseBatchOutput(string $output, int $expectedSamples, array $ipToTarget): array
+    {
+        $results = [];
+        $lines = explode("\n", trim($output));
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') continue;
+            if (str_contains($line, 'duplicate')) continue;
+            if (str_starts_with($line, 'ICMP')) continue;
+
+            // Match: "host_ip : val1 val2 - val4"  or  "host_ip : [N] val ms"
+            if (!preg_match('/^(\S+)\s*:\s*(.+)$/', $line, $m)) continue;
+
+            $ip = $m[1];
+            $valuesStr = trim($m[2]);
+
+            if (!isset($ipToTarget[$ip])) continue;
+
+            $target = $ipToTarget[$ip];
+
+            // Check if individual format: "[N] 31.2 ms"
+            if (preg_match('/^\[\d+\]\s/', $valuesStr)) {
+                $samples = $this->parseIndividualSamples($line);
+            } else {
+                $samples = $this->parseSummaryTokens($valuesStr);
+            }
+
+            $samples = $this->normalizeSamples($samples, $expectedSamples);
+            $results[$target->id] = ProbeResult::fromSamples('icmp', $samples, $this->settings->icmpTimeout());
+        }
+
+        // Any target we resolved but didn't get output for — mark as error
+        foreach ($ipToTarget as $ip => $target) {
+            if (!isset($results[$target->id])) {
+                $results[$target->id] = ProbeResult::error('icmp', 'No response from fping');
+            }
+        }
+
+        return $results;
+    }
+
+    private function parseSummaryTokens(string $valuesStr): array
+    {
+        $tokens = preg_split('/\s+/', trim($valuesStr));
+        $samples = [];
+
+        foreach ($tokens as $token) {
+            if ($token === '-' || strtolower($token) === 'timeout' || strtolower($token) === 'unreachable') {
+                $samples[] = null;
+            } elseif (is_numeric($token)) {
+                $samples[] = (float) $token;
+            }
+        }
+
+        return $samples;
+    }
+
+    private function parseIndividualSamples(string $line): array
+    {
+        $samples = [];
+        if (preg_match('/:\s*\[\d+\]\s*([\d.]+)\s*ms/', $line, $m)) {
+            $samples[] = (float) $m[1];
+        } elseif (preg_match('/:\s*\[\d+\]\s*(timeout|unreachable|-)/i', $line)) {
+            $samples[] = null;
+        }
+        return $samples;
+    }
 }
