@@ -7,6 +7,8 @@ use Illuminate\Validation\ValidationException;
 
 class SsrfProtection
 {
+    private const DNS_CACHE_VERSION = 2;
+
     /**
      * Validate that a host is safe to probe (for use during target creation/editing).
      * Throws ValidationException on failure.
@@ -67,7 +69,18 @@ class SsrfProtection
             $cached = Cache::get($cacheKey, '__pingglass_cache_miss__');
             if (is_array($cached) && array_key_exists('ip', $cached)) {
                 $cachedIp = $cached['ip'];
-                return is_string($cachedIp) && self::isIpSafe($cachedIp) ? $cachedIp : null;
+                $safeIp = is_string($cachedIp) && self::isIpSafe($cachedIp)
+                    ? $cachedIp
+                    : null;
+
+                // Entries written by the old five-minute cache did not have a
+                // version. Upgrade them on access so a rolling deployment does
+                // not trigger another synchronized cold-DNS cycle.
+                if (($cached['version'] ?? null) !== self::DNS_CACHE_VERSION) {
+                    self::cacheResolution($cacheKey, $safeIp);
+                }
+
+                return $safeIp;
             }
         } catch (\Throwable) {
             // Continue without caching if Redis/cache is unavailable.
@@ -75,7 +88,7 @@ class SsrfProtection
 
         $records = @dns_get_record($host, DNS_A | DNS_AAAA);
         if ($records === false || empty($records)) {
-            self::cacheResolution($cacheKey, null, 60);
+            self::cacheResolution($cacheKey, null);
             return null;
         }
 
@@ -83,19 +96,31 @@ class SsrfProtection
         foreach ($records as $record) {
             $ip = $record['ip'] ?? $record['ipv6'] ?? null;
             if ($ip && self::isIpSafe($ip)) {
-                self::cacheResolution($cacheKey, $ip, 300);
+                self::cacheResolution($cacheKey, $ip);
                 return $ip;
             }
         }
 
-        self::cacheResolution($cacheKey, null, 60);
+        self::cacheResolution($cacheKey, null);
         return null;
     }
 
-    private static function cacheResolution(string $key, ?string $ip, int $seconds): void
+    private static function cacheResolution(string $key, ?string $ip): void
     {
+        $failed = $ip === null;
+        $ttlKey = $failed ? 'failure_cache_ttl' : 'success_cache_ttl';
+        $jitterKey = $failed ? 'failure_cache_jitter' : 'success_cache_jitter';
+        $baseTtl = max(1, (int) config("pingglass.dns.{$ttlKey}", $failed ? 300 : 3600));
+        $jitter = max(0, (int) config("pingglass.dns.{$jitterKey}", $failed ? 300 : 3600));
+        $jitterSeconds = $jitter === 0
+            ? 0
+            : hexdec(substr(sha1($key), 0, 8)) % ($jitter + 1);
+
         try {
-            Cache::put($key, ['ip' => $ip], $seconds);
+            Cache::put($key, [
+                'version' => self::DNS_CACHE_VERSION,
+                'ip' => $ip,
+            ], $baseTtl + $jitterSeconds);
         } catch (\Throwable) {
             // Probing must not fail just because DNS caching is unavailable.
         }

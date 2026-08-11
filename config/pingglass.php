@@ -12,6 +12,17 @@ return [
     // Minimum interval between fping packets sent to any target.
     'fping_interval_ms' => env('PINGGLASS_FPING_INTERVAL_MS', 1),
 
+    // Native PHP hostname resolution is blocking, so successful lookups are
+    // shared by every worker and retained long enough to keep DNS out of the
+    // one-minute probe hot path. Deterministic jitter spreads refreshes across
+    // a window instead of expiring thousands of entries simultaneously.
+    'dns' => [
+        'success_cache_ttl' => env('PINGGLASS_DNS_CACHE_TTL', 3600),
+        'success_cache_jitter' => env('PINGGLASS_DNS_CACHE_JITTER', 3600),
+        'failure_cache_ttl' => env('PINGGLASS_DNS_FAILURE_CACHE_TTL', 300),
+        'failure_cache_jitter' => env('PINGGLASS_DNS_FAILURE_CACHE_JITTER', 300),
+    ],
+
     'icmp' => [
         'samples' => env('PINGGLASS_ICMP_SAMPLES', 10),
         'timeout' => env('PINGGLASS_ICMP_TIMEOUT', 2000),
