@@ -13,7 +13,7 @@ return [
             'connection' => 'default',
             'queue' => env('REDIS_QUEUE', 'default'),
             // Must remain greater than the longest worker/job timeout.
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 180),
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 240),
             'block_for' => null,
             'after_commit' => false,
         ],

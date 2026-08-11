@@ -232,7 +232,7 @@ Create `/etc/supervisor/conf.d/pingglass-probes.conf`:
 ```ini
 [program:pingglass-probes]
 process_name=%(program_name)s_%(process_num)02d
-command=php /var/www/pingglass/artisan queue:work redis --queue=probes --sleep=1 --tries=1 --timeout=120 --max-time=3600
+command=php /var/www/pingglass/artisan queue:work redis --queue=probes --sleep=1 --tries=3 --timeout=120 --max-time=3600
 autostart=true
 autorestart=true
 numprocs=4
@@ -354,7 +354,7 @@ If you use Horizon for queue monitoring (optional), restart that too.
 - The staleness evaluator marks targets unknown when it hasn't received data for a while. Usually means the queue workers or scheduler stopped.
 
 **High queue depth:**
-- Confirm `PINGGLASS_PROBE_CHUNK_SIZE=200` and `REDIS_QUEUE_RETRY_AFTER=180`.
+- Confirm `PINGGLASS_PROBE_CHUNK_SIZE=100` and `REDIS_QUEUE_RETRY_AFTER=240`.
 - Each probe job handles a bounded target chunk. At 10,000 targets and chunk size 200, a full cycle creates about 50 jobs.
 - Check DNS response time, worker file-descriptor limits, database write latency, and failed jobs before increasing worker count.
 

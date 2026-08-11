@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref, watch, onUnmounted } from 'vue';
 import * as echarts from 'echarts';
+import { formatChartTime, formatDateTime } from '@/lib/utils';
 
 const props = defineProps({
     series: { type: Object, default: () => ({}) },
@@ -43,7 +44,7 @@ function updateChart() {
             textStyle: { color: isDark ? '#e2e8f0' : '#1e293b' },
             formatter: (params) => {
                 if (!params.length) return '';
-                let html = `<div style="font-size:12px"><strong>${new Date(params[0].data[0]).toLocaleString()}</strong><br/>`;
+                let html = `<div style="font-size:12px"><strong>${formatDateTime(params[0].data[0])}</strong><br/>`;
                 params.forEach(p => {
                     html += `<span style="color:${p.color}">\u25CF</span> ${p.seriesName}: ${p.data[1].toFixed(1)}%<br/>`;
                 });
@@ -54,7 +55,10 @@ function updateChart() {
         xAxis: {
             type: 'time',
             axisLine: { lineStyle: { color: isDark ? '#334155' : '#e2e8f0' } },
-            axisLabel: { color: isDark ? '#94a3b8' : '#64748b' },
+            axisLabel: {
+                color: isDark ? '#94a3b8' : '#64748b',
+                formatter: value => formatChartTime(value),
+            },
         },
         yAxis: {
             type: 'value',

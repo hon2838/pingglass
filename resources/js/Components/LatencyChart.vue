@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref, watch, onUnmounted } from 'vue';
 import * as echarts from 'echarts';
+import { formatChartTime, formatDateTime } from '@/lib/utils';
 
 const props = defineProps({
     series: { type: Object, default: () => ({}) },
@@ -135,7 +136,7 @@ function updateChart() {
             textStyle: { color: isDark ? '#e2e8f0' : '#1e293b' },
             formatter: (params) => {
                 if (!params.length) return '';
-                const time = new Date(params[0].data[0]).toLocaleString();
+                const time = formatDateTime(params[0].data[0]);
                 let html = `<div style="font-size:12px"><strong>${time}</strong><br/>`;
 
                 // Group by protocol and show stats
@@ -172,7 +173,10 @@ function updateChart() {
         xAxis: {
             type: 'time',
             axisLine: { lineStyle: { color: isDark ? '#334155' : '#e2e8f0' } },
-            axisLabel: { color: isDark ? '#94a3b8' : '#64748b' },
+            axisLabel: {
+                color: isDark ? '#94a3b8' : '#64748b',
+                formatter: value => formatChartTime(value),
+            },
         },
         yAxis: {
             type: 'value',

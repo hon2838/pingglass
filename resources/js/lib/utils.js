@@ -50,6 +50,66 @@ export function formatDuration(seconds) {
     return `${(seconds / 3600).toFixed(1)}h`;
 }
 
+export function displayTimeZone() {
+    if (typeof document === 'undefined') return 'Asia/Kuala_Lumpur';
+
+    return document
+        .querySelector('meta[name="pingglass-display-timezone"]')
+        ?.getAttribute('content') || 'Asia/Kuala_Lumpur';
+}
+
+function validDate(value) {
+    if (value === null || value === undefined || value === '') return null;
+
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function formatDateTime(value) {
+    const date = validDate(value);
+    if (!date) return '-';
+
+    return new Intl.DateTimeFormat(undefined, {
+        timeZone: displayTimeZone(),
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+        timeZoneName: 'short',
+    }).format(date);
+}
+
+export function formatTime(value) {
+    const date = validDate(value);
+    if (!date) return '-';
+
+    return new Intl.DateTimeFormat(undefined, {
+        timeZone: displayTimeZone(),
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+        timeZoneName: 'short',
+    }).format(date);
+}
+
+export function formatChartTime(value) {
+    const date = validDate(value);
+    if (!date) return '-';
+
+    return new Intl.DateTimeFormat(undefined, {
+        timeZone: displayTimeZone(),
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+    }).format(date);
+}
+
 export function timeAgo(dateStr) {
     if (!dateStr) return 'Never';
     const date = new Date(dateStr);

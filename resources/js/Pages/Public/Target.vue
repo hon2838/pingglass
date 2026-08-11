@@ -14,6 +14,7 @@ import StatusDot from '@/Components/StatusDot.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import LatencyChart from '@/Components/LatencyChart.vue';
 import LossChart from '@/Components/LossChart.vue';
+import { formatDateTime } from '@/lib/utils';
 
 defineOptions({ layout: PublicLayout });
 
@@ -303,9 +304,9 @@ function timeAgo(dateStr) {
                                 <Badge v-if="incident.status === 'open'" variant="destructive" class="text-xs">Active</Badge>
                             </div>
                             <div class="text-sm text-muted-foreground mt-1">
-                                {{ new Date(incident.started_at).toLocaleString() }}
+                                {{ formatDateTime(incident.started_at) }}
                                 <template v-if="incident.ended_at">
-                                    &rarr; {{ new Date(incident.ended_at).toLocaleString() }}
+                                    &rarr; {{ formatDateTime(incident.ended_at) }}
                                 </template>
                                 <span class="ml-2 text-xs">({{ incident.duration_human }})</span>
                             </div>

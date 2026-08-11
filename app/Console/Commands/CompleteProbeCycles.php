@@ -13,10 +13,12 @@ class CompleteProbeCycles extends Command
 
     public function handle(): int
     {
-        // Close cycles that have been running for more than 5 minutes. An
-        // incomplete cycle is timed out, never reported as completed.
+        $timeoutMinutes = max(5, (int) config('pingglass.cycle_timeout_minutes', 15));
+
+        // Close cycles that have exceeded the configured full-cycle window.
+        // An incomplete cycle is timed out, never reported as completed.
         $stale = ProbeCycle::where('status', 'running')
-            ->where('started_at', '<', now()->subMinutes(5))
+            ->where('started_at', '<', now()->subMinutes($timeoutMinutes))
             ->get();
 
         foreach ($stale as $cycle) {
@@ -26,7 +28,7 @@ class CompleteProbeCycles extends Command
 
         // Also try to eagerly complete cycles where all expected probes are done
         $recentRunning = ProbeCycle::where('status', 'running')
-            ->where('started_at', '>=', now()->subMinutes(5))
+            ->where('started_at', '>=', now()->subMinutes($timeoutMinutes))
             ->get();
 
         foreach ($recentRunning as $cycle) {

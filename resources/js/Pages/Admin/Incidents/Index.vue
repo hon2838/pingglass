@@ -14,6 +14,7 @@ import StatusDot from '@/Components/StatusDot.vue';
 import FlashMessages from '@/Components/FlashMessages.vue';
 import { Link, router } from '@inertiajs/vue3';
 import { ref, watch } from 'vue';
+import { formatDateTime } from '@/lib/utils';
 
 defineOptions({ layout: AdminLayout });
 
@@ -82,7 +83,7 @@ function closeIncident(id) {
                                 {{ incident.protocol?.toUpperCase() || 'Both' }}
                             </TableCell>
                             <TableCell class="text-sm">
-                                {{ new Date(incident.started_at).toLocaleString() }}
+                                {{ formatDateTime(incident.started_at) }}
                             </TableCell>
                             <TableCell class="text-sm font-mono">
                                 {{ incident.duration_human }}

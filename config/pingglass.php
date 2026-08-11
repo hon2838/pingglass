@@ -3,7 +3,15 @@
 return [
     'fping_path' => env('PINGGLASS_FPING_PATH', '/usr/bin/fping'),
 
+    // Timestamps remain stored and exchanged in UTC. This timezone is used
+    // only when rendering human-readable dates in the web interface.
+    'display_timezone' => env('PINGGLASS_DISPLAY_TIMEZONE', 'Asia/Kuala_Lumpur'),
+
     'probe_interval' => env('PINGGLASS_PROBE_INTERVAL', 60),
+
+    // A 10k-target cold cycle can require several worker waves even though
+    // every individual chunk remains inside its own timeout.
+    'cycle_timeout_minutes' => env('PINGGLASS_CYCLE_TIMEOUT_MINUTES', 15),
 
     // Number of targets handled by one queue job. This bounds DNS, socket,
     // process, and database work while still keeping queue overhead low.

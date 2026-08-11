@@ -16,6 +16,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -24,11 +25,16 @@ class ProbeTargetsChunk implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries = 1;
+    public const TIMEOUT_SECONDS = 110;
+
+    // More than one attempt is required so a prematurely re-delivered Redis
+    // payload can defer itself behind the still-running original chunk.
+    public int $tries = 3;
+    public int $backoff = 5;
     // Must remain below both the probe worker timeout (120s) and Redis
-    // retry_after (180s). Production chunks can spend significant time in DNS
+    // retry_after (240s). Production chunks can spend significant time in DNS
     // resolution during their first pass, so 75 seconds is too aggressive.
-    public int $timeout = 110;
+    public int $timeout = self::TIMEOUT_SECONDS;
     public bool $failOnTimeout = true;
 
     public function __construct(
@@ -39,6 +45,48 @@ class ProbeTargetsChunk implements ShouldQueue
     }
 
     public function handle(
+        FpingDriver $fping,
+        TcpConnectDriver $tcp,
+        StatusEvaluator $statusEvaluator,
+        IncidentEvaluator $incidentEvaluator,
+    ): void {
+        $lock = null;
+
+        try {
+            $candidate = Cache::lock($this->executionLockKey(), self::TIMEOUT_SECONDS + 15);
+            if (!$candidate->get()) {
+                Log::warning('Duplicate probe chunk delivery deferred', [
+                    'cycle_id' => $this->probeCycleId,
+                    'target_count' => count($this->targetIds),
+                    'attempt' => $this->attempts(),
+                ]);
+                $this->release(30);
+                return;
+            }
+            $lock = $candidate;
+        } catch (Throwable $exception) {
+            // Redis/cache health is reported separately. Continue probing so a
+            // transient lock-store problem does not discard an entire chunk.
+            Log::warning('Probe chunk execution lock unavailable', [
+                'cycle_id' => $this->probeCycleId,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
+        try {
+            $this->processChunk($fping, $tcp, $statusEvaluator, $incidentEvaluator);
+        } finally {
+            if ($lock !== null) {
+                try {
+                    $lock->release();
+                } catch (Throwable) {
+                    // The lock has a short TTL and will expire automatically.
+                }
+            }
+        }
+    }
+
+    private function processChunk(
         FpingDriver $fping,
         TcpConnectDriver $tcp,
         StatusEvaluator $statusEvaluator,
@@ -172,6 +220,12 @@ class ProbeTargetsChunk implements ShouldQueue
             'successful' => $successful,
             'failed' => $failed,
         ]);
+    }
+
+    private function executionLockKey(): string
+    {
+        return 'pingglass:probe-chunk:' . $this->probeCycleId . ':'
+            . sha1(implode(',', $this->targetIds));
     }
 
     public function failed(?Throwable $exception): void

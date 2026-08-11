@@ -7,6 +7,7 @@ import CardContent from '@/Components/ui/card/CardContent.vue';
 import Badge from '@/Components/ui/badge/Badge.vue';
 import StatusDot from '@/Components/StatusDot.vue';
 import { Link } from '@inertiajs/vue3';
+import { formatDateTime, formatTime } from '@/lib/utils';
 
 defineOptions({ layout: AdminLayout });
 
@@ -77,7 +78,7 @@ const props = defineProps({
                     <div class="flex items-center justify-between">
                         <span class="text-sm">Last Cycle</span>
                         <span v-if="lastCycle" class="text-sm font-mono">
-                            {{ new Date(lastCycle.started_at).toLocaleTimeString() }}
+                            {{ formatTime(lastCycle.started_at) }}
                         </span>
                         <span v-else class="text-sm text-muted-foreground">Never</span>
                     </div>
@@ -164,7 +165,7 @@ const props = defineProps({
                                 <Badge variant="destructive" class="text-xs">{{ incident.type.replace('_', ' ') }}</Badge>
                             </div>
                             <div class="text-xs text-muted-foreground mt-0.5">
-                                {{ new Date(incident.started_at).toLocaleString() }} ({{ incident.duration_human }})
+                                {{ formatDateTime(incident.started_at) }} ({{ incident.duration_human }})
                             </div>
                         </div>
                     </div>

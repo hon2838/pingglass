@@ -9,6 +9,7 @@ import AverageLatencyChart from '@/Components/AverageLatencyChart.vue';
 import StatusDot from '@/Components/StatusDot.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import { computed } from 'vue';
+import { formatTime } from '@/lib/utils';
 
 defineOptions({ layout: PublicLayout });
 
@@ -48,7 +49,7 @@ function timeAgo(dateStr) {
                 <div class="text-left">
                     <h1 class="text-xl font-semibold">{{ overallLabel }}</h1>
                     <p class="text-sm text-muted-foreground">
-                        Last updated {{ new Date(lastUpdated).toLocaleTimeString() }}
+                        Last updated {{ formatTime(lastUpdated) }}
                     </p>
                 </div>
             </div>

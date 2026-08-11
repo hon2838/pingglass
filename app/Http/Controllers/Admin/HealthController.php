@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProbeTargetsChunk;
 use App\Models\ProbeCycle;
 use App\Models\Target;
 use App\Services\Monitoring\SettingsService;
@@ -137,11 +138,12 @@ class HealthController extends Controller
         // Scheduler (check last cycle)
         $lastCycle = ProbeCycle::latest('started_at')->first();
         $schedulerFresh = $lastCycle && $lastCycle->started_at->diffInSeconds(now()) < $freshnessWindow;
+        $displayTimezone = (string) config('pingglass.display_timezone', 'Asia/Kuala_Lumpur');
 
         $checks['scheduler'] = [
             'status' => $lastCycle ? ($schedulerFresh ? 'ok' : 'warning') : 'unknown',
             'message' => $lastCycle
-                ? "Last cycle #{$lastCycle->id} at {$lastCycle->started_at->format('H:i:s')} ({$lastCycle->started_at->diffForHumans()})"
+                ? "Last cycle #{$lastCycle->id} at {$lastCycle->started_at->copy()->setTimezone($displayTimezone)->format('H:i:s T')} ({$lastCycle->started_at->diffForHumans()})"
                 : 'No cycles recorded yet',
             'last_cycle_at' => $lastCycle?->started_at?->toISOString(),
         ];
@@ -160,9 +162,15 @@ class HealthController extends Controller
         ];
 
         // Probe settings
+        $retryAfter = (int) config('queue.connections.redis.retry_after', 240);
+        $chunkSize = min(250, max(25, (int) config('pingglass.probe_chunk_size', 100)));
+        $queueTimeoutSafe = $retryAfter > ProbeTargetsChunk::TIMEOUT_SECONDS;
         $checks['probe_config'] = [
-            'status' => 'ok',
-            'message' => "Interval: {$settings->probeInterval()}s, ICMP: {$settings->icmpSamples()} samples/{$settings->icmpTimeout()}ms, TCP: {$settings->tcpSamples()} samples/{$settings->tcpTimeout()}ms",
+            'status' => $queueTimeoutSafe ? 'ok' : 'warning',
+            'message' => "Interval: {$settings->probeInterval()}s, chunk: {$chunkSize}, job timeout: "
+                . ProbeTargetsChunk::TIMEOUT_SECONDS . "s, Redis retry_after: {$retryAfter}s, "
+                . "ICMP: {$settings->icmpSamples()} samples/{$settings->icmpTimeout()}ms, "
+                . "TCP: {$settings->tcpSamples()} samples/{$settings->tcpTimeout()}ms",
         ];
 
         return Inertia::render('Admin/Health/Index', [
