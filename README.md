@@ -1,5 +1,13 @@
 # PingGlass
 
+<p align="center">
+  <img
+    src="https://github.com/user-attachments/assets/ac1a30bc-e485-4140-aa2a-299a95716a89"
+    alt="PingGlass Banner"
+    width="1200"
+  />
+</p>
+
 PingGlass is a self-hosted network latency, packet-loss, reachability, and status-page platform. It combines SmokePing-style latency distribution charts with batched ICMP probing, concurrent TCP connection timing, incident tracking, configurable probe intervals, category/global aggregate graphs, and an authenticated administration panel.
 
 The current probe architecture is designed for both small installations and installations with 10,000 or more targets. Targets are claimed when due, grouped into bounded queue jobs, probed in batches, and written with idempotent database operations.
@@ -28,6 +36,104 @@ Repository: [github.com/samleong123/pingglass](https://github.com/samleong123/pi
 - Shared UTC storage with a configurable display timezone.
 - Dark mode and responsive public/admin interfaces.
 - A GitHub-linked "Powered by PingGlass" footer on public, login, and admin pages.
+
+## Screenshots
+
+### Public Dashboard
+
+Get an overview of monitored targets, current service status, category health, and 24-hour latency trends.
+
+<p align="center">
+  <img
+    src="https://github.com/user-attachments/assets/eebc6b37-af4a-479e-935c-ee49c89be61d"
+    alt="PingGlass Public Dashboard"
+    width="1000"
+  />
+</p>
+
+### Target Monitoring
+
+View detailed ICMP and TCP measurements for an individual target, including latency, packet loss, percentile statistics, and historical monitoring graphs.
+
+<p align="center">
+  <img
+    src="https://github.com/user-attachments/assets/69779738-c0d1-40a5-81ba-8520a7e5fb13"
+    alt="PingGlass Target Monitoring"
+    width="1000"
+  />
+</p>
+
+### Responsive Interface
+
+PingGlass provides a responsive monitoring interface across desktop, tablet, and mobile devices.
+
+<p align="center">
+  <img
+    src="https://github.com/user-attachments/assets/ef9ebc5d-479c-46db-bf48-a7e44e4e36d3"
+    alt="PingGlass Responsive Interface"
+    width="900"
+  />
+</p>
+
+### Incident Tracking
+
+Automatically track failures and recoveries with incident status, affected targets, timestamps, reasons, and duration.
+
+<p align="center">
+  <img
+    src="https://github.com/user-attachments/assets/3eadaa5e-4e06-4e28-b7db-b1b1b78e5d63"
+    alt="PingGlass Incident Tracking"
+    width="1000"
+  />
+</p>
+
+### Admin Dashboard
+
+Monitor PingGlass operations from the administration dashboard, including target status, incidents, probe activity, and system summaries.
+
+<p align="center">
+  <img
+    src="https://github.com/user-attachments/assets/49331e14-7565-474f-a76a-038a58dd84e6"
+    alt="PingGlass Admin Dashboard"
+    width="1000"
+  />
+</p>
+
+### Target Management
+
+Create and manage monitoring targets, protocols, TCP ports, categories, visibility settings, probe intervals, and monitoring thresholds.
+
+<p align="center">
+  <img
+    src="https://github.com/user-attachments/assets/d42676e8-4ac1-477c-ba50-9a58a2a9b6fa"
+    alt="PingGlass Target Management"
+    width="1000"
+  />
+</p>
+
+### Monitoring Settings
+
+Configure global monitoring behaviour, probe intervals, ICMP and TCP samples, thresholds, confirmation cycles, timeouts, and data retention.
+
+<p align="center">
+  <img
+    src="https://github.com/user-attachments/assets/f0ba6cf9-9825-4798-ac1d-da213d3898dd"
+    alt="PingGlass Monitoring Settings"
+    width="900"
+  />
+</p>
+
+### System Health
+
+Check the health of PingGlass infrastructure and probe components, including the database, Redis, queues, workers, scheduler, `fping`, TCP connectivity, and runtime configuration.
+
+<p align="center">
+  <img
+    src="https://github.com/user-attachments/assets/a49e4cda-985d-45f8-8425-34c62b20e514"
+    alt="PingGlass System Health"
+    width="1000"
+  />
+</p>
 
 ## Technology stack
 
@@ -564,3 +670,19 @@ Use [DEPLOYMENT.md](DEPLOYMENT.md) for:
 ## License
 
 PingGlass is released under the MIT License.
+
+## Credits
+
+PingGlass is inspired by [SmokePing](https://oss.oetiker.ch/smokeping/), whose latency visualization and long-term network monitoring concepts helped shape the direction of this project.
+
+A big credit goes to the SmokePing project and its contributors for pioneering an excellent way to visualize network latency and packet-loss behaviour.
+
+## Support the Project
+
+If PingGlass helps you with your network monitoring, consider giving the repository a ⭐ on GitHub.
+
+It helps others discover the project and supports its continued development.
+
+<p align="center">
+  <strong>⭐ If you find PingGlass useful, consider starring the project!</strong>
+</p>
