@@ -1502,3 +1502,64 @@ If a release must be rolled back:
 - Verify one full cycle before restoring normal traffic.
 
 Do not use `git reset --hard`, `migrate:fresh`, or unreviewed manual index/table deletion as a production rollback method.
+
+
+## 1Panel Deployment
+To deploy PingGlass using 1Panel, follow these steps:
+
+1. Ensure your PHP Docker Image is installed with the redis and phpredis extensions.
+2. If you do not intend to use Supervisor, configure your PingGlass PHP Docker container with the following entrypoint command:
+
+```bash
+# 1Panel PHP Docker Image using Alpine Linux
+sh -c "
+  set -e
+  apk add --no-cache fping # Install fping 
+  chmod u+s \$(which fping) # Assign permissions
+  
+  cd /www/sites/<pingglass_directory>/index
+
+  # 1. Start Probe Workers (Adjusted to 120s timeout; adjust worker count as needed)
+  for i in 1 2 3 4 ; do
+    (
+      while true; do
+        php artisan queue:work redis \
+          --queue=probes \
+          --sleep=1 \
+          --tries=3 \
+          --timeout=120 \
+          --max-time=3600
+        sleep 1
+      done
+    ) &
+  done
+
+  # 2. Start Default/Maintenance Workers (Crucial for system health)
+  for i in 1 2; do
+    (
+      while true; do
+        php artisan queue:work redis \
+          --queue=default,maintenance \
+          --sleep=1 \
+          --tries=3 \
+          --timeout=60 \
+          --max-time=3600
+        sleep 1
+      done
+    ) &
+  done
+
+  # 3. Start PHP-FPM
+  exec php-fpm -F 
+"
+```
+
+3. Ensure you have a process to run the Laravel scheduler every minute. In 1Panel, create a Cron Job targeting the PingGlass Docker container with the following command:
+
+```bash
+cd /www/sites/<pingglass_directory>/index && php artisan schedule:run >> /dev/null 2>&1
+```
+
+4. Set the PINGGLASS_FPING_PATH environment variable to the path of fping (e.g., /usr/sbin/fping or /usr/bin/fping, depending on your PHP Docker image).
+
+5. Set your web server root directory to `/www/sites/<pingglass_directory>/index/public` and ensure that your web server is configured to serve the application correctly, choose Laravel on the pseudo-static configuration.
