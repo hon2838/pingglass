@@ -29,8 +29,8 @@ return new class extends Migration
             $table->float('stddev_ms', 10, 2)->nullable();
             $table->timestamps();
 
-            $table->unique(['target_id', 'protocol', 'granularity', 'period_start']);
-            $table->index(['target_id', 'protocol', 'granularity', 'period_start']);
+            $table->unique(['target_id', 'protocol', 'granularity', 'period_start'], 'meas_rollups_target_proto_gran_start_uniq');
+            $table->index(['target_id', 'protocol', 'granularity', 'period_start'], 'meas_rollups_target_proto_gran_start_idx');
         });
     }
 

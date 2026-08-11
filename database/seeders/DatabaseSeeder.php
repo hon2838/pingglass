@@ -15,8 +15,8 @@ class DatabaseSeeder extends Seeder
     {
         User::create([
             'name' => 'Admin',
-            'email' => 'admin@pingglass.local',
-            'password' => Hash::make('password'),
+            'email' => 'admin@hon2838.name.my',
+            'password' => Hash::make('password12345'),
         ]);
 
         $this->seedSettings();
@@ -46,48 +46,35 @@ class DatabaseSeeder extends Seeder
 
     private function seedSampleData(): void
     {
-        $shanghai = Category::create([
-            'name' => '上海',
-            'slug' => 'shanghai',
-            'description' => 'Shanghai network targets',
+        $infra = Category::create([
+            'name' => 'Core Infrastructure',
+            'slug' => 'core-infra',
+            'description' => 'User Server Fleet',
             'is_public' => true,
             'is_enabled' => true,
             'sort_order' => 10,
         ]);
 
-        $beijing = Category::create([
-            'name' => '北京',
-            'slug' => 'beijing',
-            'description' => 'Beijing network targets',
+        $dns = Category::create([
+            'name' => 'Global DNS',
+            'slug' => 'global-dns',
+            'description' => 'Public DNS Resolvers',
             'is_public' => true,
             'is_enabled' => true,
             'sort_order' => 20,
         ]);
 
-        $guangdong = Category::create([
-            'name' => '广东',
-            'slug' => 'guangdong',
-            'description' => 'Guangdong network targets',
-            'is_public' => true,
-            'is_enabled' => true,
-            'sort_order' => 30,
-        ]);
-
         $targets = [
-            ['category_id' => $shanghai->id, 'name' => '上海电信', 'slug' => 'shanghai-telecom', 'host' => '124.74.52.254', 'icmp_enabled' => true, 'tcp_enabled' => true, 'tcp_port' => 65499, 'sort_order' => 10],
-            ['category_id' => $shanghai->id, 'name' => '上海联通', 'slug' => 'shanghai-unicom', 'host' => '112.65.18.154', 'icmp_enabled' => true, 'tcp_enabled' => true, 'tcp_port' => 65499, 'sort_order' => 20],
-            ['category_id' => $shanghai->id, 'name' => '上海移动', 'slug' => 'shanghai-mobile', 'host' => '117.131.0.1', 'icmp_enabled' => true, 'tcp_enabled' => false, 'sort_order' => 30],
-            ['category_id' => $beijing->id, 'name' => '北京电信', 'slug' => 'beijing-telecom', 'host' => '223.72.1.1', 'icmp_enabled' => true, 'tcp_enabled' => true, 'tcp_port' => 443, 'sort_order' => 10],
-            ['category_id' => $beijing->id, 'name' => '北京联通', 'slug' => 'beijing-unicom', 'host' => '123.125.81.6', 'icmp_enabled' => true, 'tcp_enabled' => true, 'tcp_port' => 443, 'sort_order' => 20],
-            ['category_id' => $beijing->id, 'name' => '北京移动', 'slug' => 'beijing-mobile', 'host' => '221.130.33.1', 'icmp_enabled' => true, 'tcp_enabled' => false, 'sort_order' => 30],
-            ['category_id' => $guangdong->id, 'name' => '广州电信', 'slug' => 'guangzhou-telecom', 'host' => '14.215.116.1', 'icmp_enabled' => true, 'tcp_enabled' => true, 'tcp_port' => 80, 'sort_order' => 10],
-            ['category_id' => $guangdong->id, 'name' => '广州联通', 'slug' => 'guangzhou-unicom', 'host' => '221.5.88.1', 'icmp_enabled' => true, 'tcp_enabled' => true, 'tcp_port' => 80, 'sort_order' => 20],
-            ['category_id' => $guangdong->id, 'name' => '广州移动', 'slug' => 'guangzhou-mobile', 'host' => '211.136.192.1', 'icmp_enabled' => true, 'tcp_enabled' => false, 'sort_order' => 30],
+            ['category_id' => $infra->id, 'name' => 'HON1 Server', 'slug' => 'hon1-server', 'host' => '140.83.58.143', 'icmp_enabled' => true, 'tcp_enabled' => true, 'tcp_port' => 22, 'sort_order' => 10],
+            ['category_id' => $infra->id, 'name' => 'HON2 Server', 'slug' => 'hon2-server', 'host' => '140.83.86.233', 'icmp_enabled' => true, 'tcp_enabled' => true, 'tcp_port' => 22, 'sort_order' => 20],
+            ['category_id' => $infra->id, 'name' => 'HON2838 Main', 'slug' => 'hon2838-main', 'host' => 'hon2838s.hon2838.name.my', 'icmp_enabled' => true, 'tcp_enabled' => true, 'tcp_port' => 80, 'sort_order' => 30],
+            ['category_id' => $dns->id, 'name' => 'Cloudflare DNS', 'slug' => 'cloudflare-dns', 'host' => '1.1.1.1', 'icmp_enabled' => true, 'tcp_enabled' => true, 'tcp_port' => 53, 'sort_order' => 10],
+            ['category_id' => $dns->id, 'name' => 'Google DNS', 'slug' => 'google-dns', 'host' => '8.8.8.8', 'icmp_enabled' => true, 'tcp_enabled' => true, 'tcp_port' => 53, 'sort_order' => 20],
         ];
 
         foreach ($targets as $data) {
             Target::create(array_merge($data, [
-                'show_host_publicly' => false,
+                'show_host_publicly' => true,
                 'is_public' => true,
                 'is_enabled' => true,
             ]));
