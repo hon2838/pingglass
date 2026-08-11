@@ -24,15 +24,19 @@ return new class extends Migration
                     ->delete();
             });
 
-        Schema::table('target_states', function (Blueprint $table) {
-            $table->unique('target_id', 'target_states_target_id_unique');
-        });
+        // Fresh/sample installations already have this unique index. Existing
+        // installations created from older migrations may not, so only add it
+        // when no equivalent unique index exists under any name.
+        if (!Schema::hasIndex('target_states', ['target_id'], 'unique')) {
+            Schema::table('target_states', function (Blueprint $table) {
+                $table->unique('target_id', 'target_states_target_id_unique');
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('target_states', function (Blueprint $table) {
-            $table->dropUnique('target_states_target_id_unique');
-        });
+        // Intentionally retained: the unique index may predate this migration,
+        // and removing it would reintroduce invalid duplicate target states.
     }
 };

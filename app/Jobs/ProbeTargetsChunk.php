@@ -25,7 +25,10 @@ class ProbeTargetsChunk implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 1;
-    public int $timeout = 75;
+    // Must remain below both the probe worker timeout (120s) and Redis
+    // retry_after (180s). Production chunks can spend significant time in DNS
+    // resolution during their first pass, so 75 seconds is too aggressive.
+    public int $timeout = 110;
     public bool $failOnTimeout = true;
 
     public function __construct(

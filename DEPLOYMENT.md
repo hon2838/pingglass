@@ -232,7 +232,7 @@ Create `/etc/supervisor/conf.d/pingglass-probes.conf`:
 ```ini
 [program:pingglass-probes]
 process_name=%(program_name)s_%(process_num)02d
-command=php /var/www/pingglass/artisan queue:work redis --queue=probes --sleep=1 --tries=1 --timeout=90 --max-time=3600
+command=php /var/www/pingglass/artisan queue:work redis --queue=probes --sleep=1 --tries=1 --timeout=120 --max-time=3600
 autostart=true
 autorestart=true
 numprocs=4
