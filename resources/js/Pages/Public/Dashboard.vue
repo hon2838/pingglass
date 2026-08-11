@@ -21,9 +21,9 @@ const props = defineProps({
 });
 
 const overallLabel = computed(() => ({
-    operational: 'All Systems Operational',
-    degraded: 'Some Systems Degraded',
-    down: 'System Outage',
+    operational: 'All Targets Operational',
+    degraded: 'Some Targets Degraded',
+    down: 'Targets Outage',
 }[props.overallStatus] || 'Status Unknown'));
 
 function statusForTarget(target) {

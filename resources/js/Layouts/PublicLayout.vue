@@ -1,6 +1,7 @@
 <script setup>
 import { Link, usePage } from '@inertiajs/vue3';
 import { ref, onMounted } from 'vue';
+import PoweredByFooter from '@/Components/PoweredByFooter.vue';
 
 const page = usePage();
 const isDark = ref(false);
@@ -19,7 +20,7 @@ onMounted(() => {
 </script>
 
 <template>
-    <div class="min-h-screen bg-background">
+    <div class="min-h-screen bg-background flex flex-col">
         <!-- Header -->
         <header class="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div class="container flex h-14 items-center justify-between">
@@ -71,17 +72,10 @@ onMounted(() => {
         </header>
 
         <!-- Main Content -->
-        <main>
+        <main class="flex-1">
             <slot />
         </main>
 
-        <!-- Footer -->
-        <footer class="border-t py-6 md:py-0">
-            <div class="container flex flex-col items-center justify-between gap-4 md:h-14 md:flex-row">
-                <p class="text-center text-sm leading-loose text-muted-foreground md:text-left">
-                    Powered by PingGlass
-                </p>
-            </div>
-        </footer>
+        <PoweredByFooter />
     </div>
 </template>

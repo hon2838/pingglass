@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\IncidentController as AdminIncidentController;
 use App\Http\Controllers\Admin\HealthController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\TargetController as AdminTargetController;
+use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Public\MonitorController;
 use App\Http\Controllers\Public\TargetController as PublicTargetController;
@@ -39,6 +40,14 @@ Route::middleware(['admin'])->prefix('admin')->name('admin.')->group(function ()
 
     Route::get('settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::post('settings', [SettingsController::class, 'update'])->name('settings.update');
+
+    Route::get('users', [AdminUserController::class, 'index'])->name('users.index');
+    Route::post('users', [AdminUserController::class, 'store'])
+        ->name('users.store')
+        ->middleware('throttle:10,1');
+    Route::put('users/{user}/password', [AdminUserController::class, 'updatePassword'])
+        ->name('users.password.update')
+        ->middleware('throttle:10,1');
 
     Route::get('health', [HealthController::class, 'index'])->name('health.index');
 });

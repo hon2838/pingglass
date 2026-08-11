@@ -9,6 +9,7 @@ import CardTitle from '@/Components/ui/card/CardTitle.vue';
 import CardDescription from '@/Components/ui/card/CardDescription.vue';
 import CardContent from '@/Components/ui/card/CardContent.vue';
 import CardFooter from '@/Components/ui/card/CardFooter.vue';
+import PoweredByFooter from '@/Components/PoweredByFooter.vue';
 
 const form = useForm({
     email: '',
@@ -24,8 +25,9 @@ function submit() {
 </script>
 
 <template>
-    <div class="min-h-screen flex items-center justify-center bg-background px-4">
-        <Card class="w-full max-w-md">
+    <div class="min-h-screen flex flex-col bg-background">
+        <div class="flex flex-1 items-center justify-center px-4 py-8">
+            <Card class="w-full max-w-md">
             <CardHeader class="text-center">
                 <div class="flex justify-center mb-2">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-10 w-10 text-primary">
@@ -44,7 +46,8 @@ function submit() {
                             id="email"
                             v-model="form.email"
                             type="email"
-                            placeholder="admin@pingglass.local"
+                            placeholder="name@example.com"
+                            autocomplete="email"
                             :disabled="form.processing"
                         />
                         <p v-if="form.errors.email" class="text-sm text-destructive">{{ form.errors.email }}</p>
@@ -56,19 +59,20 @@ function submit() {
                             v-model="form.password"
                             type="password"
                             placeholder="Enter your password"
+                            autocomplete="current-password"
                             :disabled="form.processing"
                         />
+                        <p v-if="form.errors.password" class="text-sm text-destructive">{{ form.errors.password }}</p>
                     </div>
                 </CardContent>
-                <CardFooter class="flex flex-col gap-4">
+                <CardFooter>
                     <Button type="submit" class="w-full" :disabled="form.processing">
                         {{ form.processing ? 'Signing in...' : 'Sign In' }}
                     </Button>
-                    <p class="text-xs text-center text-muted-foreground">
-                        Default credentials: admin@pingglass.local / password
-                    </p>
                 </CardFooter>
             </form>
-        </Card>
+            </Card>
+        </div>
+        <PoweredByFooter />
     </div>
 </template>
