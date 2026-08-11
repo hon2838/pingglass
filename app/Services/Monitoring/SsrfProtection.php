@@ -2,6 +2,7 @@
 
 namespace App\Services\Monitoring;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 
 class SsrfProtection
@@ -61,8 +62,20 @@ class SsrfProtection
             return null;
         }
 
+        $cacheKey = 'pingglass:dns:' . sha1(strtolower($host));
+        try {
+            $cached = Cache::get($cacheKey, '__pingglass_cache_miss__');
+            if (is_array($cached) && array_key_exists('ip', $cached)) {
+                $cachedIp = $cached['ip'];
+                return is_string($cachedIp) && self::isIpSafe($cachedIp) ? $cachedIp : null;
+            }
+        } catch (\Throwable) {
+            // Continue without caching if Redis/cache is unavailable.
+        }
+
         $records = @dns_get_record($host, DNS_A | DNS_AAAA);
         if ($records === false || empty($records)) {
+            self::cacheResolution($cacheKey, null, 60);
             return null;
         }
 
@@ -70,11 +83,22 @@ class SsrfProtection
         foreach ($records as $record) {
             $ip = $record['ip'] ?? $record['ipv6'] ?? null;
             if ($ip && self::isIpSafe($ip)) {
+                self::cacheResolution($cacheKey, $ip, 300);
                 return $ip;
             }
         }
 
+        self::cacheResolution($cacheKey, null, 60);
         return null;
+    }
+
+    private static function cacheResolution(string $key, ?string $ip, int $seconds): void
+    {
+        try {
+            Cache::put($key, ['ip' => $ip], $seconds);
+        } catch (\Throwable) {
+            // Probing must not fail just because DNS caching is unavailable.
+        }
     }
 
     /**

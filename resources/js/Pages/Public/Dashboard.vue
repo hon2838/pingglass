@@ -3,6 +3,9 @@ import { Link } from '@inertiajs/vue3';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
 import Card from '@/Components/ui/card/Card.vue';
 import CardContent from '@/Components/ui/card/CardContent.vue';
+import CardHeader from '@/Components/ui/card/CardHeader.vue';
+import CardTitle from '@/Components/ui/card/CardTitle.vue';
+import AverageLatencyChart from '@/Components/AverageLatencyChart.vue';
 import StatusDot from '@/Components/StatusDot.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import { computed } from 'vue';
@@ -13,6 +16,7 @@ const props = defineProps({
     categories: Array,
     overallStatus: String,
     lastUpdated: String,
+    globalLatencyMetrics: Object,
 });
 
 const overallLabel = computed(() => ({
@@ -50,6 +54,34 @@ function timeAgo(dateStr) {
             </div>
         </div>
 
+        <Card class="mb-8">
+            <CardHeader>
+                <CardTitle class="text-base">All Targets — Average Latency (24 hours)</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <AverageLatencyChart :series="globalLatencyMetrics" />
+            </CardContent>
+        </Card>
+
+        <div class="grid gap-3 mb-8 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+            <div class="rounded-lg border bg-card p-3">
+                <div class="flex items-center gap-2 font-medium"><StatusDot status="online" /> Online</div>
+                <p class="mt-1 text-xs text-muted-foreground">All enabled probes are reachable and below their thresholds.</p>
+            </div>
+            <div class="rounded-lg border bg-card p-3">
+                <div class="flex items-center gap-2 font-medium"><StatusDot status="degraded" /> Degraded</div>
+                <p class="mt-1 text-xs text-muted-foreground">High loss/latency, mixed probe results, or a failure awaiting confirmation.</p>
+            </div>
+            <div class="rounded-lg border bg-card p-3">
+                <div class="flex items-center gap-2 font-medium"><StatusDot status="down" /> Down</div>
+                <p class="mt-1 text-xs text-muted-foreground">Every enabled probe failed for the configured confirmation cycles.</p>
+            </div>
+            <div class="rounded-lg border bg-card p-3">
+                <div class="flex items-center gap-2 font-medium"><StatusDot status="unknown" /> Unknown</div>
+                <p class="mt-1 text-xs text-muted-foreground">No trustworthy result is available or monitoring data is stale.</p>
+            </div>
+        </div>
+
         <!-- Categories -->
         <div v-for="category in categories" :key="category.id" class="mb-8">
             <div class="flex items-center justify-between mb-4">
@@ -61,6 +93,12 @@ function timeAgo(dateStr) {
                     View all {{ category.total_targets }} &rarr;
                 </Link>
             </div>
+
+            <Card class="mb-4">
+                <CardContent class="p-4">
+                    <AverageLatencyChart :series="category.latency_metrics" height="180px" />
+                </CardContent>
+            </Card>
 
             <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <Link

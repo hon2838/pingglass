@@ -36,6 +36,7 @@ const form = useForm({
     tcp_port: props.target.tcp_port,
     loss_threshold_percent: props.target.loss_threshold_percent,
     latency_threshold_ms: props.target.latency_threshold_ms,
+    probe_interval_seconds: props.target.probe_interval_seconds,
     sort_order: props.target.sort_order,
 });
 
@@ -136,6 +137,21 @@ function submit() {
                     <div v-if="form.tcp_enabled" class="space-y-2">
                         <Label for="tcp_port">TCP Port</Label>
                         <Input id="tcp_port" v-model="form.tcp_port" type="number" min="1" max="65535" />
+                    </div>
+
+                    <div class="space-y-2">
+                        <Label for="probe_interval_seconds">Probe Interval</Label>
+                        <select id="probe_interval_seconds" v-model="form.probe_interval_seconds" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                            <option :value="null">Use global default</option>
+                            <option :value="60">1 minute</option>
+                            <option :value="120">2 minutes</option>
+                            <option :value="300">5 minutes</option>
+                            <option :value="600">10 minutes</option>
+                            <option :value="900">15 minutes</option>
+                            <option :value="1800">30 minutes</option>
+                            <option :value="3600">1 hour</option>
+                        </select>
+                        <p v-if="form.errors.probe_interval_seconds" class="text-sm text-destructive">{{ form.errors.probe_interval_seconds }}</p>
                     </div>
 
                     <Separator />

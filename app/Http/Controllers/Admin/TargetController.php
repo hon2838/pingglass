@@ -10,6 +10,7 @@ use App\Services\Monitoring\Drivers\FpingDriver;
 use App\Services\Monitoring\Drivers\TcpConnectDriver;
 use App\Services\Monitoring\SsrfProtection;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
@@ -100,6 +101,18 @@ class TargetController extends Controller
             $data['tcp_port'] = null;
         }
 
+        if (
+            $target->host !== $data['host']
+            || $target->icmp_enabled !== (bool) $data['icmp_enabled']
+            || $target->tcp_enabled !== (bool) $data['tcp_enabled']
+            || $target->tcp_port !== ($data['tcp_port'] ?? null)
+            || $target->probe_interval_seconds !== ($data['probe_interval_seconds'] ?? null)
+            || $target->is_enabled !== (bool) $data['is_enabled']
+        ) {
+            $data['next_probe_at'] = null;
+            $data['active_probe_cycle_id'] = null;
+        }
+
         $target->update($data);
         AuditLog::log('target.updated', $target, $data);
 
@@ -123,7 +136,12 @@ class TargetController extends Controller
             return back()->with('error', 'Invalid field.');
         }
 
-        $target->update([$field => !$target->$field]);
+        $values = [$field => !$target->$field];
+        if ($field === 'is_enabled') {
+            $values['next_probe_at'] = $values[$field] ? null : $target->next_probe_at;
+            $values['active_probe_cycle_id'] = null;
+        }
+        $target->update($values);
         AuditLog::log("target.toggled", $target, [$field => $target->$field]);
 
         return back()->with('success', 'Target updated.');
@@ -332,6 +350,7 @@ class TargetController extends Controller
             'tcp_port' => 'nullable|integer|min:1|max:65535',
             'loss_threshold_percent' => 'nullable|numeric|min:0|max:100',
             'latency_threshold_ms' => 'nullable|numeric|min:0|max:10000',
+            'probe_interval_seconds' => ['nullable', 'integer', Rule::in([60, 120, 300, 600, 900, 1800, 3600])],
             'sort_order' => 'integer|min:0',
         ];
     }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use App\Models\ScopeMeasurementRollup;
 use App\Models\Target;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,13 @@ class MonitorController extends Controller
             ->ordered()
             ->get();
 
+        $scopeMetrics = ScopeMeasurementRollup::where('granularity', '5m')
+            ->where('period_start', '>=', now()->subDay())
+            ->whereIn('scope_key', $categories->pluck('id')->map(fn($id) => "category:{$id}")->push('global'))
+            ->orderBy('period_start')
+            ->get()
+            ->groupBy('scope_key');
+
         // For each category, load only the first 5 targets + a count of total
         $categories->each(function ($cat) {
             $cat->setRelation('targets', $cat->targets()
@@ -28,7 +36,7 @@ class MonitorController extends Controller
             $cat->total_targets = $cat->targets()->public()->count();
         });
 
-        $overallStatus = $this->calculateOverallStatus($categories);
+        $overallStatus = $this->calculateOverallStatus();
 
         return Inertia::render('Public/Dashboard', [
             'categories' => $categories->map(fn($cat) => [
@@ -36,6 +44,7 @@ class MonitorController extends Controller
                 'name' => $cat->name,
                 'slug' => $cat->slug,
                 'total_targets' => $cat->total_targets,
+                'latency_metrics' => $this->formatScopeMetrics($scopeMetrics->get("category:{$cat->id}", collect())),
                 'targets' => $cat->targets->map(fn($t) => array_merge($t->toArrayPublic(), [
                     'state' => $t->state ? [
                         'overall_status' => $t->state->overall_status,
@@ -50,6 +59,7 @@ class MonitorController extends Controller
                 ])),
             ]),
             'overallStatus' => $overallStatus,
+            'globalLatencyMetrics' => $this->formatScopeMetrics($scopeMetrics->get('global', collect())),
             'lastUpdated' => now()->toISOString(),
         ]);
     }
@@ -74,6 +84,12 @@ class MonitorController extends Controller
 
         $targets = $query->paginate(25);
 
+        $scopeMetrics = ScopeMeasurementRollup::where('scope_key', "category:{$category->id}")
+            ->where('granularity', '5m')
+            ->where('period_start', '>=', now()->subDay())
+            ->orderBy('period_start')
+            ->get();
+
         $mappedData = $targets->getCollection()->map(fn($t) => array_merge($t->toArrayPublic(), [
             'state' => $t->state ? [
                 'overall_status' => $t->state->overall_status,
@@ -95,6 +111,7 @@ class MonitorController extends Controller
                 'description' => $category->description,
             ],
             'filters' => $request->only(['search']),
+            'latencyMetrics' => $this->formatScopeMetrics($scopeMetrics),
             'targets' => [
                 'data' => $mappedData,
                 'links' => $targets->linkCollection()->toArray(),
@@ -119,7 +136,7 @@ class MonitorController extends Controller
         });
 
         return response()->json([
-            'overall_status' => $this->calculateOverallStatus($categories),
+            'overall_status' => $this->calculateOverallStatus(),
             'last_updated' => now()->toISOString(),
             'categories' => $categories->map(fn($cat) => [
                 'name' => $cat->name,
@@ -135,21 +152,44 @@ class MonitorController extends Controller
         return response()->json($categories);
     }
 
-    private function calculateOverallStatus($categories): string
+    private function calculateOverallStatus(): string
     {
-        $hasDown = false;
-        $hasDegraded = false;
+        $counts = Target::query()
+            ->join('categories', 'categories.id', '=', 'targets.category_id')
+            ->leftJoin('target_states', 'target_states.target_id', '=', 'targets.id')
+            ->where('targets.is_public', true)
+            ->where('targets.is_enabled', true)
+            ->where('categories.is_public', true)
+            ->where('categories.is_enabled', true)
+            ->selectRaw("COUNT(*) as total")
+            ->selectRaw("SUM(CASE WHEN target_states.overall_status = 'online' THEN 1 ELSE 0 END) as online")
+            ->selectRaw("SUM(CASE WHEN target_states.overall_status = 'degraded' THEN 1 ELSE 0 END) as degraded")
+            ->selectRaw("SUM(CASE WHEN target_states.overall_status = 'down' THEN 1 ELSE 0 END) as down_count")
+            ->selectRaw("SUM(CASE WHEN target_states.overall_status IS NULL OR target_states.overall_status = 'unknown' THEN 1 ELSE 0 END) as unknown_count")
+            ->first();
 
-        foreach ($categories as $cat) {
-            foreach ($cat->targets as $target) {
-                $status = $target->state?->overall_status ?? 'unknown';
-                if ($status === 'down') $hasDown = true;
-                if ($status === 'degraded') $hasDegraded = true;
-            }
+        $total = (int) ($counts->total ?? 0);
+        if ($total === 0 || (int) $counts->unknown_count === $total) return 'unknown';
+        if ((int) $counts->down_count === $total) return 'down';
+        if ((int) $counts->down_count > 0 || (int) $counts->degraded > 0 || (int) $counts->unknown_count > 0) {
+            return 'degraded';
         }
 
-        if ($hasDown) return 'degraded';
-        if ($hasDegraded) return 'degraded';
         return 'operational';
+    }
+
+    private function formatScopeMetrics($rollups): array
+    {
+        $series = ['icmp' => [], 'tcp' => []];
+        foreach ($rollups as $rollup) {
+            $series[$rollup->protocol][] = [
+                'time' => $rollup->period_start->toISOString(),
+                'avg' => $rollup->avg_ms,
+                'loss' => $rollup->loss_percent,
+                'targets' => $rollup->target_count,
+            ];
+        }
+
+        return $series;
     }
 }

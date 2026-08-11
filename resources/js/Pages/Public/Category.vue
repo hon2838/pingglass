@@ -6,6 +6,7 @@ import CardContent from '@/Components/ui/card/CardContent.vue';
 import Input from '@/Components/ui/input/Input.vue';
 import StatusDot from '@/Components/StatusDot.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
+import AverageLatencyChart from '@/Components/AverageLatencyChart.vue';
 import { ref, watch } from 'vue';
 
 defineOptions({ layout: PublicLayout });
@@ -14,6 +15,7 @@ const props = defineProps({
     category: Object,
     targets: Object,
     filters: Object,
+    latencyMetrics: Object,
 });
 
 const search = ref(props.filters?.search || '');
@@ -55,6 +57,13 @@ function timeAgo(dateStr) {
             <p v-if="category.description" class="text-muted-foreground mt-1">{{ category.description }}</p>
             <p class="text-sm text-muted-foreground mt-1">{{ targets.total }} targets</p>
         </div>
+
+        <Card class="mb-6">
+            <CardContent class="p-4">
+                <div class="font-medium mb-2">All Targets — Average Latency (24 hours)</div>
+                <AverageLatencyChart :series="latencyMetrics" />
+            </CardContent>
+        </Card>
 
         <!-- Search -->
         <div class="mb-6 max-w-md">

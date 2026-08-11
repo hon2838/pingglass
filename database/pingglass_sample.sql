@@ -132,6 +132,9 @@ CREATE TABLE IF NOT EXISTS `targets` (
     `tcp_port` SMALLINT UNSIGNED DEFAULT NULL,
     `loss_threshold_percent` FLOAT(5,2) DEFAULT NULL,
     `latency_threshold_ms` FLOAT(10,2) DEFAULT NULL,
+    `probe_interval_seconds` INT UNSIGNED DEFAULT NULL,
+    `next_probe_at` TIMESTAMP NULL DEFAULT NULL,
+    `active_probe_cycle_id` BIGINT UNSIGNED DEFAULT NULL,
     `sort_order` INT NOT NULL DEFAULT 0,
     `created_at` TIMESTAMP NULL DEFAULT NULL,
     `updated_at` TIMESTAMP NULL DEFAULT NULL,
@@ -139,6 +142,7 @@ CREATE TABLE IF NOT EXISTS `targets` (
     UNIQUE KEY `targets_slug_unique` (`slug`),
     KEY `targets_category_id_is_enabled_index` (`category_id`, `is_enabled`),
     KEY `targets_is_public_is_enabled_index` (`is_public`, `is_enabled`),
+    KEY `targets_due_probe_index` (`is_enabled`, `active_probe_cycle_id`, `next_probe_at`),
     CONSTRAINT `targets_category_id_foreign` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -188,6 +192,8 @@ INSERT INTO `monitor_settings` (`key`, `value`, `type`, `created_at`, `updated_a
 ('tcp_samples', '10', 'int', NOW(), NOW()),
 ('icmp_timeout', '2000', 'int', NOW(), NOW()),
 ('tcp_timeout', '2000', 'int', NOW(), NOW()),
+('loss_threshold_percent', '10', 'float', NOW(), NOW()),
+('latency_threshold_ms', '200', 'float', NOW(), NOW()),
 ('raw_retention_days', '30', 'int', NOW(), NOW()),
 ('rollup5m_retention_days', '180', 'int', NOW(), NOW()),
 ('down_confirmation_cycles', '3', 'int', NOW(), NOW()),
@@ -277,6 +283,38 @@ CREATE TABLE IF NOT EXISTS `measurement_rollups` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -------------------------------------------
+-- Table: scope_measurement_rollups
+-- -------------------------------------------
+CREATE TABLE IF NOT EXISTS `scope_measurement_rollups` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `scope_key` VARCHAR(80) NOT NULL,
+    `category_id` BIGINT UNSIGNED DEFAULT NULL,
+    `protocol` VARCHAR(10) NOT NULL,
+    `granularity` VARCHAR(5) NOT NULL,
+    `period_start` TIMESTAMP NOT NULL,
+    `target_count` INT UNSIGNED NOT NULL DEFAULT 0,
+    `sent` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    `received` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    `loss_percent` FLOAT(5,2) NOT NULL DEFAULT 0,
+    `min_ms` FLOAT(10,2) DEFAULT NULL,
+    `max_ms` FLOAT(10,2) DEFAULT NULL,
+    `avg_ms` FLOAT(10,2) DEFAULT NULL,
+    `median_ms` FLOAT(10,2) DEFAULT NULL,
+    `p10_ms` FLOAT(10,2) DEFAULT NULL,
+    `p25_ms` FLOAT(10,2) DEFAULT NULL,
+    `p75_ms` FLOAT(10,2) DEFAULT NULL,
+    `p90_ms` FLOAT(10,2) DEFAULT NULL,
+    `p95_ms` FLOAT(10,2) DEFAULT NULL,
+    `stddev_ms` FLOAT(10,2) DEFAULT NULL,
+    `created_at` TIMESTAMP NULL DEFAULT NULL,
+    `updated_at` TIMESTAMP NULL DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `scope_rollups_unique` (`scope_key`, `protocol`, `granularity`, `period_start`),
+    KEY `scope_rollups_category_time_index` (`category_id`, `granularity`, `period_start`),
+    CONSTRAINT `scope_rollups_category_id_foreign` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -------------------------------------------
 -- Table: incidents
 -- -------------------------------------------
 CREATE TABLE IF NOT EXISTS `incidents` (
@@ -340,6 +378,10 @@ INSERT INTO `migrations` (`migration`, `batch`) VALUES
 ('2024_01_01_000009_create_audit_logs_table', 1),
 ('2024_01_01_000010_add_confirmation_counters_to_target_states', 1),
 ('2024_01_01_000011_add_per_target_thresholds_to_targets', 1);
+INSERT INTO `migrations` (`migration`, `batch`) VALUES
+('2026_08_11_000001_add_probe_schedule_to_targets', 2),
+('2026_08_11_000002_create_scope_measurement_rollups_table', 2),
+('2026_08_11_000003_enforce_one_state_per_target', 2);
 
 -- -------------------------------------------
 -- Sample categories and targets

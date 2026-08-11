@@ -20,7 +20,18 @@ class IncidentEvaluator
     public function evaluate(Target $target, TargetState $state): void
     {
         $overall = $state->overall_status;
-        $openIncidents = $target->incidents()->open()->get();
+        $openIncidents = $target->relationLoaded('incidents')
+            ? $target->incidents
+            : $target->incidents()->open()->get();
+
+        // A completed probe means monitoring is no longer stale even when the
+        // remote target itself is degraded, down, or produced a tool error.
+        $this->closeMatching(
+            $target,
+            $openIncidents,
+            fn(Incident $incident) => $incident->type === 'monitoring_stale',
+            'Monitoring resumed and a fresh probe result was recorded',
+        );
 
         if (in_array($overall, ['down', 'degraded'])) {
             $this->handleProblematic($target, $state, $openIncidents);
@@ -36,7 +47,9 @@ class IncidentEvaluator
      */
     public function evaluateStale(Target $target, TargetState $state): void
     {
-        $openIncidents = $target->incidents()->open()->get();
+        $openIncidents = $target->relationLoaded('incidents')
+            ? $target->incidents
+            : $target->incidents()->open()->get();
         $hasStaleIncident = $openIncidents->contains('type', 'monitoring_stale');
 
         if (!$hasStaleIncident) {
@@ -58,11 +71,28 @@ class IncidentEvaluator
 
     private function handleProblematic(Target $target, TargetState $state, $openIncidents): void
     {
-        $type = $state->overall_status === 'down' ? 'target_down' : 'high_latency';
+        $type = $state->overall_status === 'down' ? 'target_down' : 'target_degraded';
         $reason = $this->buildReason($state);
 
+        $this->closeMatching(
+            $target,
+            $openIncidents,
+            fn(Incident $incident) => in_array(
+                $incident->type,
+                $type === 'target_down'
+                    ? ['target_degraded', 'high_latency']
+                    : ['target_down'],
+                true,
+            ),
+            "Target status changed to {$state->overall_status}",
+        );
+
         // Check if we already have an incident of this type
-        $existing = $openIncidents->first(fn($i) => $i->type === $type);
+        $existing = $openIncidents->first(fn($incident) =>
+            $incident->status === 'open'
+            && ($incident->type === $type
+                || ($type === 'target_degraded' && $incident->type === 'high_latency'))
+        );
         if ($existing) {
             $existing->update(['last_reason' => $reason]);
             return;
@@ -92,9 +122,22 @@ class IncidentEvaluator
 
     private function handleRecovery(Target $target, $openIncidents): void
     {
-        foreach ($openIncidents as $incident) {
+        foreach ($openIncidents->where('status', 'open') as $incident) {
             // Close all open incidents when target is confirmed online
             $incident->close('Target recovered - all protocols operational');
+
+            Log::info('Incident closed', [
+                'target_id' => $target->id,
+                'incident_id' => $incident->id,
+                'duration_seconds' => $incident->fresh()->duration_seconds,
+            ]);
+        }
+    }
+
+    private function closeMatching(Target $target, $openIncidents, callable $matches, string $reason): void
+    {
+        foreach ($openIncidents->where('status', 'open')->filter($matches) as $incident) {
+            $incident->close($reason);
 
             Log::info('Incident closed', [
                 'target_id' => $target->id,

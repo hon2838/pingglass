@@ -16,7 +16,28 @@ class StatusEvaluator
      * Evaluate the current measurement results and update target state.
      * Returns the updated TargetState for downstream use by IncidentEvaluator.
      */
-    public function evaluate(Target $target, ?ProbeResult $icmpResult, ?ProbeResult $tcpResult): TargetState
+    public function evaluate(
+        Target $target,
+        ?ProbeResult $icmpResult,
+        ?ProbeResult $tcpResult,
+        ?TargetState $existingState = null,
+    ): TargetState
+    {
+        $state = $this->evaluateState($target, $icmpResult, $tcpResult, $existingState);
+        $state->save();
+        return $state;
+    }
+
+    /**
+     * Calculate a state without writing it. Chunk jobs use this to bulk-upsert
+     * all target states in one database statement.
+     */
+    public function evaluateState(
+        Target $target,
+        ?ProbeResult $icmpResult,
+        ?ProbeResult $tcpResult,
+        ?TargetState $existingState = null,
+    ): TargetState
     {
         $icmpStatus = $this->evaluateProtocol($icmpResult, $target);
         $tcpStatus = $this->evaluateProtocol($tcpResult, $target);
@@ -25,7 +46,10 @@ class StatusEvaluator
         $rawOverall = $this->determineRawOverall($target, $icmpStatus, $tcpStatus);
 
         // Load or create state
-        $state = TargetState::firstOrNew(['target_id' => $target->id]);
+        $state = $existingState
+            ?? ($target->relationLoaded('state')
+                ? new TargetState(['target_id' => $target->id])
+                : TargetState::firstOrNew(['target_id' => $target->id]));
         $previousOverall = $state->overall_status ?? 'unknown';
 
         // Update per-protocol metrics
@@ -51,8 +75,6 @@ class StatusEvaluator
         }
 
         $state->overall_status = $confirmedOverall;
-        $state->save();
-
         return $state;
     }
 
@@ -63,10 +85,10 @@ class StatusEvaluator
         if ($result->lossPercent >= 100) return 'down';
 
         // Per-target thresholds override global defaults
-        $lossThreshold = $target?->loss_threshold_percent ?? config('pingglass.degraded.loss_threshold_percent', 10);
-        if ($result->lossPercent >= $lossThreshold) return 'degraded';
+        $lossThreshold = $target?->loss_threshold_percent ?? $this->settings->lossThresholdPercent();
+        if ($result->lossPercent > 0 && $result->lossPercent >= $lossThreshold) return 'degraded';
 
-        $latencyThreshold = $target?->latency_threshold_ms ?? config('pingglass.degraded.latency_threshold_ms', 200);
+        $latencyThreshold = $target?->latency_threshold_ms ?? $this->settings->latencyThresholdMs();
         if ($result->medianMs !== null && $result->medianMs > $latencyThreshold) return 'degraded';
 
         return 'online';
@@ -84,22 +106,24 @@ class StatusEvaluator
 
         if (empty($statuses)) return 'unknown';
 
-        // If both are unknown, it's unknown
-        if (count(array_filter($statuses, fn($s) => $s !== 'unknown')) === 0) return 'unknown';
+        if (count(array_filter($statuses, fn($status) => $status === 'down')) === count($statuses)) {
+            return 'down';
+        }
 
-        // If any is down and none are online, it's down
-        if (in_array('down', $statuses) && !in_array('online', $statuses)) return 'down';
+        if (in_array('online', $statuses, true)) {
+            return count(array_filter($statuses, fn($status) => $status === 'online')) === count($statuses)
+                ? 'online'
+                : 'degraded';
+        }
 
-        // If any is down but some are online, it's degraded
-        if (in_array('down', $statuses) && in_array('online', $statuses)) return 'degraded';
+        // A degraded protocol is still reachable, so it prevents an overall
+        // DOWN result even when another protocol has failed completely.
+        if (in_array('degraded', $statuses, true)) return 'degraded';
 
-        // If any is degraded, it's degraded
-        if (in_array('degraded', $statuses)) return 'degraded';
+        // A tool/DNS error must never preserve or manufacture ONLINE/DOWN.
+        if (in_array('unknown', $statuses, true)) return 'unknown';
 
-        // Mixed unknown and online: degraded (partial monitoring)
-        if (in_array('unknown', $statuses) && in_array('online', $statuses)) return 'degraded';
-
-        return 'online';
+        return 'unknown';
     }
 
     /**
@@ -113,8 +137,7 @@ class StatusEvaluator
         $downRequired = $this->settings->downConfirmationCycles();
         $recoveryRequired = $this->settings->recoveryConfirmationCycles();
 
-        if ($raw === 'down' || $raw === 'degraded') {
-            // Reset recovery counter, increment failure counter
+        if ($raw === 'down') {
             $state->consecutive_recoveries = 0;
             $state->consecutive_failures = ($state->consecutive_failures ?? 0) + 1;
 
@@ -122,22 +145,21 @@ class StatusEvaluator
                 $state->first_failure_at = now();
             }
 
-            // Only transition to down if we have enough consecutive failures
-            if ($raw === 'down' && $state->consecutive_failures >= $downRequired) {
+            if ($state->consecutive_failures >= $downRequired) {
                 return 'down';
             }
 
-            // Degraded is reported immediately (no confirmation needed for degraded)
-            if ($raw === 'degraded') {
-                return 'degraded';
-            }
+            if ($previous === 'down') return 'down';
+            if (in_array($previous, ['online', 'degraded'], true)) return 'degraded';
+            return 'unknown';
+        }
 
-            // Not enough confirmations yet - keep previous status if it was online
-            if ($previous === 'online' || $previous === 'unknown') {
-                return 'online';
-            }
-
-            return $previous;
+        if ($raw === 'degraded') {
+            // Degradation is immediate but must not count toward DOWN.
+            $state->consecutive_failures = 0;
+            $state->consecutive_recoveries = 0;
+            $state->first_failure_at ??= now();
+            return 'degraded';
         }
 
         if ($raw === 'online') {
@@ -162,8 +184,11 @@ class StatusEvaluator
             return 'online';
         }
 
-        // Unknown - don't change counters, keep previous status
-        // But if stale for too long, the StalenessEvaluator will handle it
-        return $previous;
+        // Probe/tool errors are UNKNOWN immediately and break confirmation
+        // streaks. StalenessEvaluator separately handles probes not running.
+        $state->consecutive_failures = 0;
+        $state->consecutive_recoveries = 0;
+        $state->first_failure_at = null;
+        return 'unknown';
     }
 }

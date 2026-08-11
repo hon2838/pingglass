@@ -36,6 +36,7 @@ const form = useForm({
     tcp_port: null,
     loss_threshold_percent: null,
     latency_threshold_ms: null,
+    probe_interval_seconds: null,
     sort_order: 0,
 });
 
@@ -158,18 +159,33 @@ function submit() {
                         <p v-if="form.errors.tcp_port" class="text-sm text-destructive">{{ form.errors.tcp_port }}</p>
                     </div>
 
+                    <div class="space-y-2">
+                        <Label for="probe_interval_seconds">Probe Interval</Label>
+                        <select id="probe_interval_seconds" v-model="form.probe_interval_seconds" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                            <option :value="null">Use global default</option>
+                            <option :value="60">1 minute</option>
+                            <option :value="120">2 minutes</option>
+                            <option :value="300">5 minutes</option>
+                            <option :value="600">10 minutes</option>
+                            <option :value="900">15 minutes</option>
+                            <option :value="1800">30 minutes</option>
+                            <option :value="3600">1 hour</option>
+                        </select>
+                        <p v-if="form.errors.probe_interval_seconds" class="text-sm text-destructive">{{ form.errors.probe_interval_seconds }}</p>
+                    </div>
+
                     <Separator />
 
                     <div class="grid grid-cols-2 gap-4">
                         <div class="space-y-2">
                             <Label for="loss_threshold">Loss Threshold (%)</Label>
                             <Input id="loss_threshold" v-model="form.loss_threshold_percent" type="number" min="0" max="100" step="0.1" placeholder="Global default" />
-                            <p class="text-xs text-muted-foreground">Blank uses global default (10%)</p>
+                            <p class="text-xs text-muted-foreground">Blank uses the configurable global default</p>
                         </div>
                         <div class="space-y-2">
                             <Label for="latency_threshold">Latency Threshold (ms)</Label>
                             <Input id="latency_threshold" v-model="form.latency_threshold_ms" type="number" min="0" max="10000" step="1" placeholder="Global default" />
-                            <p class="text-xs text-muted-foreground">Blank uses global default (200ms)</p>
+                            <p class="text-xs text-muted-foreground">Blank uses the configurable global default</p>
                         </div>
                     </div>
 

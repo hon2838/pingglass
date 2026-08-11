@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Schedule;
 
 // Probe cycle runs every minute
-Schedule::command('pingglass:probe-cycle')->everyMinute()->withoutOverlapping();
+Schedule::command('pingglass:probe-cycle')->everyMinute()->withoutOverlapping(2);
 
 // Complete stale probe cycles every 2 minutes
 Schedule::command('pingglass:complete-cycles')->everyTwoMinutes()->withoutOverlapping();

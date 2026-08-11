@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\ProbeCycle;
+use App\Models\Target;
 use App\Services\Monitoring\SettingsService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -40,8 +41,11 @@ class HealthController extends Controller
             } else {
                 $queueSize = Redis::llen('queues:probes');
             }
+            $chunkSize = min(250, max(25, (int) config('pingglass.probe_chunk_size', 200)));
+            $normalCycleJobs = (int) ceil(Target::enabled()->count() / $chunkSize);
+            $queueWarningAt = max(100, $normalCycleJobs * 2);
             $checks['queue'] = [
-                'status' => $queueSize > 100 ? 'warning' : 'ok',
+                'status' => $queueSize > $queueWarningAt ? 'warning' : 'ok',
                 'message' => "{$queueSize} jobs pending",
                 'pending' => $queueSize,
             ];
@@ -50,9 +54,19 @@ class HealthController extends Controller
         }
 
         // Worker heartbeat — check if probe jobs are completing
+        $globalInterval = max(60, $settings->probeInterval());
+        $intervalRow = Target::enabled()
+            ->selectRaw(
+                'MIN(COALESCE(probe_interval_seconds, ?)) as interval_seconds',
+                [$globalInterval],
+            )
+            ->first();
+        $expectedInterval = max(60, (int) ($intervalRow?->interval_seconds ?: $globalInterval));
+        $freshnessWindow = max(300, $expectedInterval + 120);
+
         try {
             $recentComplete = ProbeCycle::where('status', 'completed')
-                ->where('completed_at', '>=', now()->subMinutes(5))
+                ->where('completed_at', '>=', now()->subSeconds($freshnessWindow))
                 ->exists();
             $checks['worker'] = [
                 'status' => $recentComplete ? 'ok' : 'warning',
@@ -85,7 +99,7 @@ class HealthController extends Controller
         if ($fpingExecutable) {
             try {
                 $result = Process::timeout(5)->run([$fpingPath, '127.0.0.1', '-c', '1', '-t', '500']);
-                $fpingWorks = true; // Any output means the binary works
+                $fpingWorks = in_array($result->exitCode(), [0, 1], true);
             } catch (\Exception) {}
         }
 
@@ -122,7 +136,7 @@ class HealthController extends Controller
 
         // Scheduler (check last cycle)
         $lastCycle = ProbeCycle::latest('started_at')->first();
-        $schedulerFresh = $lastCycle && $lastCycle->started_at->diffInSeconds(now()) < 180;
+        $schedulerFresh = $lastCycle && $lastCycle->started_at->diffInSeconds(now()) < $freshnessWindow;
 
         $checks['scheduler'] = [
             'status' => $lastCycle ? ($schedulerFresh ? 'ok' : 'warning') : 'unknown',

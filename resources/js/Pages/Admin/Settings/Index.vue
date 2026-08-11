@@ -19,10 +19,13 @@ const props = defineProps({
 });
 
 const form = useForm({
+    probe_interval: props.settings.probe_interval,
     icmp_samples: props.settings.icmp_samples,
     tcp_samples: props.settings.tcp_samples,
     icmp_timeout: props.settings.icmp_timeout,
     tcp_timeout: props.settings.tcp_timeout,
+    loss_threshold_percent: props.settings.loss_threshold_percent,
+    latency_threshold_ms: props.settings.latency_threshold_ms,
     raw_retention_days: props.settings.raw_retention_days,
     rollup5m_retention_days: props.settings.rollup5m_retention_days,
     down_confirmation_cycles: props.settings.down_confirmation_cycles,
@@ -46,12 +49,18 @@ function submit() {
                     <CardTitle class="text-base">Probe Configuration</CardTitle>
                 </CardHeader>
                 <CardContent class="space-y-4">
-                    <div class="flex items-center justify-between p-3 rounded-md bg-muted">
-                        <div>
-                            <div class="text-sm font-medium">Probe Interval</div>
-                            <div class="text-xs text-muted-foreground">Fixed at 60 seconds for V1</div>
-                        </div>
-                        <span class="text-sm font-mono">60s</span>
+                    <div class="space-y-2">
+                        <Label for="probe_interval">Default Probe Interval</Label>
+                        <select id="probe_interval" v-model="form.probe_interval" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                            <option :value="60">1 minute</option>
+                            <option :value="120">2 minutes</option>
+                            <option :value="300">5 minutes</option>
+                            <option :value="600">10 minutes</option>
+                            <option :value="900">15 minutes</option>
+                            <option :value="1800">30 minutes</option>
+                            <option :value="3600">1 hour</option>
+                        </select>
+                        <p class="text-xs text-muted-foreground">Targets may override this default. The scheduler still runs once per minute and dispatches only targets that are due.</p>
                     </div>
 
                     <Separator />
@@ -103,6 +112,19 @@ function submit() {
                     <CardTitle class="text-base">Status Thresholds</CardTitle>
                 </CardHeader>
                 <CardContent class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <Label for="loss_threshold_percent">Default Loss Threshold (%)</Label>
+                            <Input id="loss_threshold_percent" v-model="form.loss_threshold_percent" type="number" min="0" max="100" step="0.1" />
+                            <p class="text-xs text-muted-foreground">At or above this loss, a reachable target is degraded.</p>
+                        </div>
+                        <div class="space-y-2">
+                            <Label for="latency_threshold_ms">Default Median Latency Threshold (ms)</Label>
+                            <Input id="latency_threshold_ms" v-model="form.latency_threshold_ms" type="number" min="0" max="10000" step="1" />
+                            <p class="text-xs text-muted-foreground">Above this median latency, a target is degraded.</p>
+                        </div>
+                    </div>
+                    <Separator />
                     <div class="space-y-2">
                         <Label for="down_confirmation_cycles">Down Confirmation (cycles)</Label>
                         <Input id="down_confirmation_cycles" v-model="form.down_confirmation_cycles" type="number" min="1" max="10" />

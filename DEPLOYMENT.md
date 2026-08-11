@@ -216,7 +216,7 @@ What the scheduler runs:
 
 | Command | How often | What it does |
 |---------|-----------|-------------|
-| `pingglass:probe-cycle` | Every minute | Dispatches probe jobs for all enabled targets |
+| `pingglass:probe-cycle` | Every minute | Dispatches chunk jobs only for enabled targets that are due |
 | `pingglass:complete-cycles` | Every 2 min | Closes stale cycles that didn't finish (fallback) |
 | `pingglass:evaluate-staleness` | Every 3 min | Marks targets as unknown if no data is arriving |
 | `pingglass:aggregate-five-minute` | Every 5 min | Rolls up raw measurements into 5-minute buckets |
@@ -225,14 +225,14 @@ What the scheduler runs:
 
 ## 10. Queue workers
 
-The probe jobs are the critical path. You need enough workers to finish all targets within 60 seconds. The default config gives you 4 probe workers and 2 general workers — adjust based on how many targets you have.
+The probe jobs are the critical path. The default config gives you 4 probe workers and 2 general workers — adjust based on target count and interval. For roughly 10,000 targets at a one-minute interval and chunk size 200, start with 20-30 probe workers and tune from observed cycle duration, file-descriptor use, network rate, and MySQL load.
 
 Create `/etc/supervisor/conf.d/pingglass-probes.conf`:
 
 ```ini
 [program:pingglass-probes]
 process_name=%(program_name)s_%(process_num)02d
-command=php /var/www/pingglass/artisan queue:work redis --queue=probes --tries=1 --max-time=120
+command=php /var/www/pingglass/artisan queue:work redis --queue=probes --sleep=1 --tries=1 --timeout=90 --max-time=3600
 autostart=true
 autorestart=true
 numprocs=4
@@ -316,7 +316,7 @@ The important stuff to back up:
 ```bash
 mysqldump -u root -p pingglass \
     users categories targets target_states monitor_settings \
-    incidents measurement_rollups audit_logs \
+    incidents measurement_rollups scope_measurement_rollups audit_logs \
     > pingglass-backup.sql
 ```
 
@@ -354,8 +354,9 @@ If you use Horizon for queue monitoring (optional), restart that too.
 - The staleness evaluator marks targets unknown when it hasn't received data for a while. Usually means the queue workers or scheduler stopped.
 
 **High queue depth:**
-- Not enough workers for the number of targets. Increase `numprocs` in the probe worker supervisor config.
-- Each target takes roughly 2-3 seconds to probe (ICMP timeout + TCP timeout). With 4 workers, you can handle about 80-100 targets per minute.
+- Confirm `PINGGLASS_PROBE_CHUNK_SIZE=200` and `REDIS_QUEUE_RETRY_AFTER=180`.
+- Each probe job handles a bounded target chunk. At 10,000 targets and chunk size 200, a full cycle creates about 50 jobs.
+- Check DNS response time, worker file-descriptor limits, database write latency, and failed jobs before increasing worker count.
 
 **fping permission errors:**
 - Make sure fping is setuid root, or run: `sudo chmod u+s $(which fping)`

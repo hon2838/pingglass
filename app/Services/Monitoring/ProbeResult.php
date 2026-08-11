@@ -27,7 +27,10 @@ class ProbeResult
 
     public static function fromSamples(string $protocol, array $samples, int $timeout): self
     {
-        $validSamples = array_filter($samples, fn($s) => $s !== null && $s > 0);
+        $validSamples = array_filter(
+            $samples,
+            fn($sample) => $sample !== null && is_numeric($sample) && (float) $sample >= 0,
+        );
         $sent = count($samples);
         $received = count($validSamples);
         $failed = $sent - $received;

@@ -31,6 +31,8 @@ class DatabaseSeeder extends Seeder
             ['key' => 'tcp_samples', 'value' => '10', 'type' => 'int'],
             ['key' => 'icmp_timeout', 'value' => '2000', 'type' => 'int'],
             ['key' => 'tcp_timeout', 'value' => '2000', 'type' => 'int'],
+            ['key' => 'loss_threshold_percent', 'value' => '10', 'type' => 'float'],
+            ['key' => 'latency_threshold_ms', 'value' => '200', 'type' => 'float'],
             ['key' => 'raw_retention_days', 'value' => '30', 'type' => 'int'],
             ['key' => 'rollup5m_retention_days', 'value' => '180', 'type' => 'int'],
             ['key' => 'down_confirmation_cycles', 'value' => '3', 'type' => 'int'],

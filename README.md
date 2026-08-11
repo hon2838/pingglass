@@ -2,7 +2,7 @@
 
 Network latency and packet loss monitoring. Think SmokePing, but modern.
 
-PingGlass pings your targets every 60 seconds using ICMP (fping) and TCP connection timing, stores the raw samples, and renders interactive charts with percentile bands so you can see exactly when your network went sideways.
+PingGlass probes targets at configurable intervals using ICMP (fping) and TCP connection timing, stores the raw samples, and renders interactive charts with percentile bands so you can see exactly when your network went sideways.
 
 ## What it does
 
@@ -64,11 +64,11 @@ For a proper production setup with queue workers, fping, Nginx, and Supervisor, 
 
 ## How the monitoring works
 
-Every 60 seconds, the scheduler kicks off a probe cycle:
+Every minute, the scheduler selects targets whose configurable interval is due and starts a probe cycle:
 
-1. Reads all enabled targets from the database
-2. Dispatches a queue job for each target
-3. Each job runs ICMP and/or TCP probes, collects samples, calculates statistics
+1. Reads enabled targets whose global/per-target interval is due and claims them against duplicate dispatch
+2. Dispatches bounded queue jobs containing up to 200 targets by default
+3. Each job runs batched ICMP and concurrent TCP probes, collects samples, and calculates statistics
 4. Results are stored in the `measurements` table
 5. Status is evaluated (online/degraded/down) with confirmation logic
 6. Incidents are opened or closed as needed
@@ -90,17 +90,16 @@ Categories are things like regions or ISPs. Targets are the actual hosts you're 
 
 Each target gets an overall status based on its protocol results:
 
-| ICMP    | TCP     | Overall   |
-|---------|---------|-----------|
-| OK      | OK      | Online    |
-| FAIL    | OK      | Degraded  |
-| OK      | FAIL    | Degraded  |
-| FAIL    | FAIL    | Down      |
-| —       | —       | Unknown   |
+| Condition | Overall |
+|-----------|---------|
+| Every enabled protocol is reachable and below the configured loss/latency thresholds | Online |
+| Threshold-level loss/high latency, a mixed protocol result, or total failure awaiting confirmation | Degraded |
+| Every enabled protocol has 100% loss for the configured consecutive-cycle count | Down |
+| DNS/probe tooling returned no usable result, or measurements became stale | Unknown |
 
-A target doesn't flip to "down" after one bad measurement. By default it takes 3 consecutive failed cycles. Recovery requires 2 consecutive good cycles. Both are configurable.
+A target doesn't flip to "down" after one bad measurement. By default it takes 3 consecutive failed cycles; it displays Degraded during that confirmation window if it was previously reachable. Recovery from Down or Degraded requires 2 consecutive good cycles. Confirmation counts and global loss/latency thresholds are configurable, with optional per-target threshold overrides.
 
-**Unknown** means the monitor itself hasn't received data recently — could be a queue worker issue, a broken fping install, or the scheduler not running. This is important: you don't want the dashboard saying "everything's fine" when actually the monitor is dead.
+**Unknown** means target reachability cannot be determined — for example DNS failure, a broken `fping` install, a queue worker issue, or the scheduler not running. It is deliberately different from Down, which requires successful probing that received no replies.
 
 ## Data retention
 
@@ -138,18 +137,24 @@ All settings live in `.env`. The probe engine, status evaluator, and cleanup job
 
 ```env
 PINGGLASS_FPING_PATH=/usr/bin/fping
+PINGGLASS_PROBE_INTERVAL=60
+PINGGLASS_PROBE_CHUNK_SIZE=200
+PINGGLASS_FPING_INTERVAL_MS=1
 PINGGLASS_ICMP_SAMPLES=10
 PINGGLASS_TCP_SAMPLES=10
 PINGGLASS_ICMP_TIMEOUT=2000
 PINGGLASS_TCP_TIMEOUT=2000
+PINGGLASS_LOSS_THRESHOLD_PERCENT=10
+PINGGLASS_LATENCY_THRESHOLD_MS=200
 PINGGLASS_RAW_RETENTION_DAYS=30
 PINGGLASS_ROLLUP5M_RETENTION_DAYS=180
 PINGGLASS_DOWN_CONFIRMATION_CYCLES=3
 PINGGLASS_RECOVERY_CONFIRMATION_CYCLES=2
+REDIS_QUEUE_RETRY_AFTER=180
 PINGGLASS_ALLOW_PRIVATE_TARGETS=false
 ```
 
-The probe interval is fixed at 60 seconds for now. Supporting arbitrary intervals would need a different scheduling approach.
+The global probe interval and optional per-target overrides support 1, 2, 5, 10, 15, 30, or 60 minutes. The scheduler runs every minute and dispatches only targets that are due.
 
 ## Security
 

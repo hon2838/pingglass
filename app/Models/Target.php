@@ -17,6 +17,7 @@ class Target extends Model
         'show_host_publicly', 'is_public', 'is_enabled',
         'icmp_enabled', 'tcp_enabled', 'tcp_port',
         'loss_threshold_percent', 'latency_threshold_ms',
+        'probe_interval_seconds', 'next_probe_at', 'active_probe_cycle_id',
         'sort_order',
     ];
 
@@ -32,6 +33,9 @@ class Target extends Model
             'tcp_port' => 'integer',
             'loss_threshold_percent' => 'float',
             'latency_threshold_ms' => 'float',
+            'probe_interval_seconds' => 'integer',
+            'next_probe_at' => 'datetime',
+            'active_probe_cycle_id' => 'integer',
             'sort_order' => 'integer',
         ];
     }

@@ -5,6 +5,13 @@ return [
 
     'probe_interval' => env('PINGGLASS_PROBE_INTERVAL', 60),
 
+    // Number of targets handled by one queue job. This bounds DNS, socket,
+    // process, and database work while still keeping queue overhead low.
+    'probe_chunk_size' => env('PINGGLASS_PROBE_CHUNK_SIZE', 200),
+
+    // Minimum interval between fping packets sent to any target.
+    'fping_interval_ms' => env('PINGGLASS_FPING_INTERVAL_MS', 1),
+
     'icmp' => [
         'samples' => env('PINGGLASS_ICMP_SAMPLES', 10),
         'timeout' => env('PINGGLASS_ICMP_TIMEOUT', 2000),
@@ -26,8 +33,8 @@ return [
     ],
 
     'degraded' => [
-        'loss_threshold_percent' => 10,
-        'latency_threshold_ms' => 200,
+        'loss_threshold_percent' => env('PINGGLASS_LOSS_THRESHOLD_PERCENT', 10),
+        'latency_threshold_ms' => env('PINGGLASS_LATENCY_THRESHOLD_MS', 200),
     ],
 
     // Set to true to allow monitoring private/internal IPs (127.x, 10.x, 192.168.x, etc.)
