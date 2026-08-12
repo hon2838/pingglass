@@ -31,7 +31,8 @@ fi
 
 # Run database migrations and setup
 php artisan storage:link || true
-php artisan migrate:fresh --seed --force
+php artisan migrate --force
+if [ "${PINGGLASS_RUN_SEEDERS:-false}" = "true" ]; then php artisan db:seed --force; fi
 php artisan optimize:clear
 php artisan config:cache
 php artisan route:cache
