@@ -32,7 +32,15 @@ fi
 # Run database migrations and setup
 php artisan storage:link || true
 php artisan migrate --force
-php artisan db:seed --force
+
+if [ ! -f /var/www/html/storage/app/.seeded ]; then
+    echo "Running initial database seeder..."
+    php artisan db:seed --force
+    touch /var/www/html/storage/app/.seeded
+else
+    echo "Database already seeded, skipping."
+fi
+
 php artisan optimize:clear
 php artisan config:cache
 php artisan route:cache

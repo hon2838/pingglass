@@ -29,13 +29,14 @@ RUN apk add --no-cache \
     nginx \
     fping \
     bash \
-    net-tools
+    net-tools \
+    libcap
 
 # Install PHP extensions using pre-compiled binaries
 RUN install-php-extensions pdo_mysql sockets bcmath pcntl intl zip redis
 
-# Set setuid for fping so it can send raw ICMP packets
-RUN chmod u+s /usr/sbin/fping
+# Set capabilities for fping so it can send raw ICMP packets without full root
+RUN setcap cap_net_raw+ep /usr/sbin/fping
 
 WORKDIR /var/www/html
 
