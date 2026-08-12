@@ -1,6 +1,6 @@
 services:
   pingglass:
-    image: hon2838/pingglass:latest
+    image: pingglass:latest
     build: .
     container_name: pingglass-app
     restart: always
@@ -12,13 +12,13 @@ services:
       APP_NAME: "PingGlass"
       APP_ENV: "production"
       APP_DEBUG: "false"
-      APP_URL: "https://pingglass.hon2838.name.my"
+      APP_URL: "http://localhost:8080"
       DB_CONNECTION: "mysql"
       DB_HOST: "pingglass-db"
       DB_PORT: "3306"
       DB_DATABASE: "pingglass"
       DB_USERNAME: "pingglass"
-      DB_PASSWORD: "pingglass_secure_pass_2026"
+      DB_PASSWORD: "secret"
       REDIS_HOST: "pingglass-redis"
       REDIS_PORT: "6379"
       PINGGLASS_FPING_PATH: "/usr/sbin/fping"
@@ -37,10 +37,10 @@ services:
     restart: always
     command: --default-storage-engine=InnoDB --innodb-buffer-pool-size=64M
     environment:
-      MYSQL_ROOT_PASSWORD: "pingglass_root_secure_2026"
+      MYSQL_ROOT_PASSWORD: "root"
       MYSQL_DATABASE: "pingglass"
       MYSQL_USER: "pingglass"
-      MYSQL_PASSWORD: "pingglass_secure_pass_2026"
+      MYSQL_PASSWORD: "secret"
     volumes:
       - pingglass_db_data:/var/lib/mysql
     healthcheck:

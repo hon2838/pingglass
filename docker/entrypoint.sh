@@ -31,7 +31,8 @@ fi
 
 # Run database migrations and setup
 php artisan storage:link || true
-php artisan migrate:fresh --seed --force
+php artisan migrate --force
+php artisan db:seed --force
 php artisan optimize:clear
 php artisan config:cache
 php artisan route:cache
