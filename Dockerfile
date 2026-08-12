@@ -30,7 +30,8 @@ RUN apk add --no-cache \
     fping \
     bash \
     net-tools \
-    libcap
+    libcap \
+    curl
 
 # Install PHP extensions using pre-compiled binaries
 RUN install-php-extensions pdo_mysql sockets bcmath pcntl intl zip redis
@@ -58,3 +59,6 @@ RUN chmod +x /entrypoint.sh
 EXPOSE 80
 
 ENTRYPOINT ["/entrypoint.sh"]
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD curl -f http://localhost/up || exit 1

@@ -23,13 +23,15 @@ services:
       REDIS_PORT: "6379"
       PINGGLASS_FPING_PATH: "/usr/sbin/fping"
       PINGGLASS_ALLOW_PRIVATE_TARGETS: "true"
-      PINGGLASS_DISPLAY_TIMEZONE: "Asia/Kuala_Lumpur"
+      PINGGLASS_DISPLAY_TIMEZONE: "${PINGGLASS_TIMEZONE:-UTC}"
       REDIS_QUEUE_RETRY_AFTER: "240"
     depends_on:
       pingglass-db:
         condition: service_healthy
       pingglass-redis:
         condition: service_healthy
+    volumes:
+      - pingglass_app_storage:/var/www/html/storage
 
   pingglass-db:
     image: mariadb:10.11
@@ -62,3 +64,4 @@ services:
 
 volumes:
   pingglass_db_data:
+  pingglass_app_storage:
