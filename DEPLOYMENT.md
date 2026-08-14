@@ -33,6 +33,7 @@ The job timeout must be lower than the worker timeout, and the worker timeout mu
 17. [Safe application updates](#safe-application-updates)
 18. [Backups and restore preparation](#backups-and-restore-preparation)
 19. [Rollback planning](#rollback-planning)
+20. [1Panel Deployment](#1panel-deployment)
 
 ## Current production architecture
 
@@ -1508,7 +1509,7 @@ Do not use `git reset --hard`, `migrate:fresh`, or unreviewed manual index/table
 To deploy PingGlass using 1Panel, follow these steps:
 
 1. Ensure your PHP Docker Image is installed with the redis and phpredis extensions.
-2. If you do not intend to use Supervisor, configure your PingGlass PHP Docker container with the following entrypoint command:
+2. Configure your PingGlass PHP Docker container with the following entrypoint command:
 
 ```bash
 # 1Panel PHP Docker Image using Alpine Linux
@@ -1519,47 +1520,47 @@ sh -c "
   
   cd /www/sites/<pingglass_directory>/index
 
-  # 1. Start Probe Workers (Adjusted to 120s timeout; adjust worker count as needed)
-  for i in 1 2 3 4 ; do
-    (
-      while true; do
-        php artisan queue:work redis \
-          --queue=probes \
-          --sleep=1 \
-          --tries=3 \
-          --timeout=120 \
-          --max-time=3600
-        sleep 1
-      done
-    ) &
-  done
-
-  # 2. Start Default/Maintenance Workers (Crucial for system health)
-  for i in 1 2; do
-    (
-      while true; do
-        php artisan queue:work redis \
-          --queue=default,maintenance \
-          --sleep=1 \
-          --tries=3 \
-          --timeout=60 \
-          --max-time=3600
-        sleep 1
-      done
-    ) &
-  done
-
-  # 3. Start PHP-FPM
+  # Start PHP-FPM
   exec php-fpm -F 
 "
 ```
+3. Configure Supervisor with 1Panel (Toolbox -> Supervisor) with two configuration below.
+```ini
+[program:pingglass-probes]
+command                 = docker exec -i <PHPContainerRunningPingGlass> -c 'cd <DirectoryToPingGlassIndexInDocker> && exec php artisan queue:work redis --queue=probes --sleep=1 --tries=3 --timeout=180 --max-time=3600'
+directory               = /
+autorestart             = true
+startsecs               = 3
+stdout_logfile          = /opt/1panel/tools/supervisord/log/pingglass-probes.out.log
+stderr_logfile          = /opt/1panel/tools/supervisord/log/pingglass-probes.err.log
+stdout_logfile_maxbytes = 2MB
+stderr_logfile_maxbytes = 2MB
+user                    = root
+priority                = 999
+numprocs                = 4
+process_name            = %(program_name)s_%(process_num)02d
 
-3. Ensure you have a process to run the Laravel scheduler every minute. In 1Panel, create a Cron Job targeting the PingGlass Docker container with the following command:
+
+[program:pingglass-default]
+command                 = docker exec -i <PHPContainerRunningPingGlass> sh -c 'cd <DirectoryToPingGlassIndexInDocker> && exec php artisan queue:work redis --queue=default,maintenance --sleep=1 --tries=3 --timeout=60 --max-time=3600'
+directory               = /
+autorestart             = true
+startsecs               = 3
+stdout_logfile          = /opt/1panel/tools/supervisord/log/pingglass-default.out.log
+stderr_logfile          = /opt/1panel/tools/supervisord/log/pingglass-default.err.log
+stdout_logfile_maxbytes = 2MB
+stderr_logfile_maxbytes = 2MB
+user                    = root
+priority                = 999
+numprocs                = 2
+process_name            = %(program_name)s_%(process_num)02d
+```
+5. Ensure you have a process to run the Laravel scheduler every minute. In 1Panel, create a Cron Job targeting the PingGlass Docker container with the following command:
 
 ```bash
 cd /www/sites/<pingglass_directory>/index && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-4. Set the PINGGLASS_FPING_PATH environment variable to the path of fping (e.g., /usr/sbin/fping or /usr/bin/fping, depending on your PHP Docker image).
+5. Set the PINGGLASS_FPING_PATH environment variable to the path of fping (e.g., /usr/sbin/fping or /usr/bin/fping, depending on your PHP Docker image).
 
-5. Set your web server root directory to `/www/sites/<pingglass_directory>/index/public` and ensure that your web server is configured to serve the application correctly, choose Laravel on the pseudo-static configuration.
+6. Set your web server root directory to `/www/sites/<pingglass_directory>/index/public` and ensure that your web server is configured to serve the application correctly, choose Laravel on the pseudo-static configuration.
