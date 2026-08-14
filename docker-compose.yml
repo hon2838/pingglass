@@ -1,0 +1,67 @@
+services:
+  pingglass:
+    image: pingglass:latest
+    build: .
+    container_name: pingglass-app
+    restart: always
+    ports:
+      - "8080:80"
+    cap_add:
+      - NET_RAW
+    environment:
+      APP_NAME: "PingGlass"
+      APP_ENV: "production"
+      APP_DEBUG: "false"
+      APP_URL: "http://localhost:8080"
+      DB_CONNECTION: "mysql"
+      DB_HOST: "pingglass-db"
+      DB_PORT: "3306"
+      DB_DATABASE: "${DB_DATABASE:-pingglass}"
+      DB_USERNAME: "${DB_USERNAME:-pingglass}"
+      DB_PASSWORD: "${DB_PASSWORD:-secret}"
+      REDIS_HOST: "pingglass-redis"
+      REDIS_PORT: "6379"
+      PINGGLASS_FPING_PATH: "/usr/sbin/fping"
+      PINGGLASS_ALLOW_PRIVATE_TARGETS: "true"
+      PINGGLASS_DISPLAY_TIMEZONE: "${PINGGLASS_TIMEZONE:-UTC}"
+      REDIS_QUEUE_RETRY_AFTER: "240"
+    depends_on:
+      pingglass-db:
+        condition: service_healthy
+      pingglass-redis:
+        condition: service_healthy
+    volumes:
+      - pingglass_app_storage:/var/www/html/storage
+
+  pingglass-db:
+    image: mariadb:10.11
+    container_name: pingglass-db
+    restart: always
+    command: --default-storage-engine=InnoDB --innodb-buffer-pool-size=64M
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-root}"
+      MYSQL_DATABASE: "${DB_DATABASE:-pingglass}"
+      MYSQL_USER: "${DB_USERNAME:-pingglass}"
+      MYSQL_PASSWORD: "${DB_PASSWORD:-secret}"
+    volumes:
+      - pingglass_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pingglass-redis:
+    image: redis:7-alpine
+    container_name: pingglass-redis
+    restart: always
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pingglass_db_data:
+  pingglass_app_storage:
